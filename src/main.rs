@@ -1,13 +1,17 @@
 use bevy::{prelude::*, window::CursorGrabMode, DefaultPlugins};
+use bevy_egui::EguiPlugin;
 
 mod player;
 mod terrain;
+mod ui;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
+        .add_plugin(EguiPlugin)
         .add_plugin(terrain::TerrainPlugin)
         .add_plugin(player::PlayerPlugin)
+        .add_plugin(ui::UiPlugin)
         .add_startup_system(setup_window_system)
         .run();
 }

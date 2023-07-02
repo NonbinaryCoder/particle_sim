@@ -17,6 +17,8 @@ pub struct Bindings {
 
     pub walk: Axis2,
     pub up_down: Axis,
+
+    pub toggle_cursor: Button,
 }
 
 impl Default for Bindings {
@@ -40,6 +42,8 @@ impl Default for Bindings {
                 pos: Button::Key(KeyCode::Space),
                 neg: Button::Key(KeyCode::LControl),
             },
+
+            toggle_cursor: Button::Key(KeyCode::Escape),
         }
     }
 }
@@ -74,6 +78,17 @@ impl Binding for Button {
     fn value(&self, inputs: &mut Self::Inputs<'_, '_>) -> Self::Output {
         match self {
             &Button::Key(code) => inputs.keys.pressed(code) || inputs.keys.just_pressed(code),
+        }
+    }
+}
+
+impl Button {
+    pub fn just_pressed(
+        &self,
+        inputs: &mut <Self as Binding>::Inputs<'_, '_>,
+    ) -> <Self as Binding>::Output {
+        match self {
+            Button::Key(code) => inputs.keys.just_pressed(*code),
         }
     }
 }

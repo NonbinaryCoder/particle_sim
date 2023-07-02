@@ -1,10 +1,13 @@
 //! Player controller.
 
-mod bindings;
+pub mod bindings;
+mod inspector;
 
 use std::f32::consts::PI;
 
 use bevy::prelude::*;
+
+use crate::ui::CursorGrabbed;
 
 use self::bindings::{Binding, Bindings};
 
@@ -12,15 +15,16 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(bindings::BindingsPlugin)
+        app.add_plugin(inspector::InspectorPlugin)
+            .add_plugin(bindings::BindingsPlugin)
             .insert_resource(PlayerSpeed(0.5))
             .add_startup_system(spawn_player_system)
             .add_systems(
                 (
-                    player_look_system,
-                    look_direction_system,
+                    player_look_system.run_if(resource_equals(CursorGrabbed(true))),
+                    look_direction_system.in_set(MoveEntitySet::Look),
                     player_move_system,
-                    apply_momentum_system,
+                    apply_momentum_system.in_set(MoveEntitySet::Move),
                     apply_friction_system,
                 )
                     .chain(),
@@ -28,9 +32,15 @@ impl Plugin for PlayerPlugin {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, SystemSet)]
+pub enum MoveEntitySet {
+    Look,
+    Move,
+}
+
 /// Marker component for the main player.
 #[derive(Debug, Component)]
-struct Player;
+pub struct Player;
 
 /// Startup system that spawns the player camera.
 fn spawn_player_system(mut commands: Commands) {

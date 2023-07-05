@@ -25,7 +25,7 @@ impl Default for Bindings {
     fn default() -> Self {
         Self {
             look: Axis2::Mouse {
-                sensitivity: Vec2::splat(0.001),
+                sensitivity: Vec2::splat(0.004),
             },
 
             walk: Axis2::Composite {

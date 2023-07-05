@@ -1,4 +1,14 @@
-use bevy::prelude::*;
+use bevy::{
+    pbr::{MaterialPipeline, MaterialPipelineKey},
+    prelude::*,
+    reflect::TypeUuid,
+    render::{
+        mesh::MeshVertexBufferLayout,
+        render_resource::{
+            AsBindGroup, RenderPipelineDescriptor, ShaderRef, SpecializedMeshPipelineError,
+        },
+    },
+};
 
 use super::{storage::DEFAULT_SIZE, Atom};
 
@@ -8,35 +18,52 @@ pub struct RenderingPlugin;
 
 impl Plugin for RenderingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(mesh_gen::MeshGenPlugin).add_startup_systems(
-            (
-                create_terrain_materials_system,
-                apply_system_buffers,
-                create_floor_system,
-            )
-                .chain(),
-        );
+        app.add_plugin(mesh_gen::MeshGenPlugin)
+            .add_plugin(MaterialPlugin::<TerrainMaterial>::default())
+            .add_startup_systems(
+                (
+                    create_terrain_materials_system,
+                    apply_system_buffers,
+                    create_floor_system,
+                )
+                    .chain(),
+            );
     }
 }
 
 /// Materials used by atoms and the floor.
 #[derive(Debug, Resource)]
 struct TerrainMaterials {
-    opaque: Handle<StandardMaterial>,
+    opaque: Handle<TerrainMaterial>,
 }
 
-impl FromWorld for TerrainMaterials {
-    fn from_world(world: &mut World) -> Self {
-        Self {
-            opaque: world
-                .resource_mut::<Assets<TerrainMaterial>>()
-                .add(StandardMaterial::default()),
-        }
+#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
+#[uuid = "46c0094b-ce2b-4c35-ac23-49388d7428ab"]
+struct TerrainMaterial {}
+
+impl Material for TerrainMaterial {
+    fn vertex_shader() -> ShaderRef {
+        "shaders/opaque.wgsl".into()
+    }
+
+    fn fragment_shader() -> ShaderRef {
+        "shaders/opaque.wgsl".into()
+    }
+
+    fn specialize(
+        _pipeline: &MaterialPipeline<Self>,
+        descriptor: &mut RenderPipelineDescriptor,
+        layout: &MeshVertexBufferLayout,
+        _key: MaterialPipelineKey<Self>,
+    ) -> Result<(), SpecializedMeshPipelineError> {
+        let vertex_layout = layout.get_layout(&[
+            Mesh::ATTRIBUTE_POSITION.at_shader_location(0),
+            Mesh::ATTRIBUTE_COLOR.at_shader_location(1),
+        ])?;
+        descriptor.vertex.buffers = vec![vertex_layout];
+        Ok(())
     }
 }
-
-/// Material type used by atoms and the floor.
-type TerrainMaterial = StandardMaterial;
 
 /// Startup system that creates the materials used for atoms and the floor.
 fn create_terrain_materials_system(
@@ -44,10 +71,7 @@ fn create_terrain_materials_system(
     mut materials: ResMut<Assets<TerrainMaterial>>,
 ) {
     commands.insert_resource(TerrainMaterials {
-        opaque: materials.add(StandardMaterial {
-            base_color: Color::WHITE,
-            ..Default::default()
-        }),
+        opaque: materials.add(TerrainMaterial {}),
     })
 }
 
@@ -57,7 +81,7 @@ fn create_floor_system(
     mut meshes: ResMut<Assets<Mesh>>,
     materials: Res<TerrainMaterials>,
 ) {
-    let mesh = meshes.add(shape::Cube::new(1.0).into());
+    let mesh = meshes.add(mesh_gen::cube());
     commands.spawn(MaterialMeshBundle {
         mesh,
         material: materials.opaque.clone(),

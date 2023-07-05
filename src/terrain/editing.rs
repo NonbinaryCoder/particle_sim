@@ -24,7 +24,21 @@ pub fn place_atom_system(
             world.set(
                 pos,
                 Atom {
-                    color: AtomColor::from_u32(0xffffffff),
+                    color: AtomColor::WHITE,
+                },
+            );
+        } else if keys.just_pressed(KeyCode::Z) {
+            world.set(
+                pos,
+                Atom {
+                    color: AtomColor::from_u32(0xff0000ff),
+                },
+            );
+        } else if keys.just_pressed(KeyCode::X) {
+            world.set(
+                pos,
+                Atom {
+                    color: AtomColor::from_u32(0x00ff00ff),
                 },
             );
         }

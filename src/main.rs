@@ -19,7 +19,11 @@ fn main() {
 /// Setup system that sets window title and hides and grabs the cursor.
 fn setup_window_system(mut window_query: Query<&mut Window>) {
     let mut window = window_query.single_mut();
-    window.title = "Particle Sim".to_string();
+    if cfg!(debug_assertions) {
+        window.title = "Particle Sim (DEBUG BUILD)".to_string();
+    } else {
+        window.title = "Particle Sim".to_string();
+    }
     window.cursor.visible = false;
     window.cursor.grab_mode = CursorGrabMode::Locked;
 }

@@ -11,13 +11,15 @@ pub struct AtomColor {
 impl AtomColor {
     pub const INVISIBLE: Self = Self::from_u32(0);
 
+    pub const WHITE: Self = Self::from_u32(0xffffffff);
+
     /// 0xrrggbbaa
     pub const fn from_u32(val: u32) -> Self {
         let [r, g, b, a] = val.to_be_bytes();
         Self { r, g, b, a }
     }
 
-    pub fn to_mesh_color(self) -> [f32; 4] {
-        Color::rgba_u8(self.r, self.g, self.b, self.a).as_rgba_f32()
+    pub fn to_mesh_color(self, shading: f32) -> [f32; 4] {
+        (Color::rgba_u8(self.r, self.g, self.b, self.a) * shading).as_rgba_f32()
     }
 }

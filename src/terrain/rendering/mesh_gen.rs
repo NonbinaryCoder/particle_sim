@@ -57,12 +57,10 @@ fn modify_chunk_mesh(
 ) {
     if data.visible_atom_count > 0 {
         let (entity, mesh) = get_entity_and_mesh(commands, meshes, materials, data, pos);
-        let attributes = MeshAttributes::extract(mesh);
-        attributes.position.clear();
-        attributes.normal.clear();
-        attributes.color.clear();
+        let mut builder = MeshBuilder::extract(mesh);
+        builder.clear();
 
-        generate_chunk_mesh(chunk, pos, data, attributes);
+        generate_chunk_mesh(chunk, pos, data, builder);
 
         let aabb = mesh.compute_aabb().unwrap_or_default();
         if let Ok(mut mesh_aabb) = aabb_query.get_mut(entity) {
@@ -90,41 +88,17 @@ fn get_entity_and_mesh<'m>(
     (*entity, meshes.get_mut(mesh).unwrap())
 }
 
-fn generate_chunk_mesh(chunk: Chunk, pos: UVec3, data: &mut ChunkData, mut mesh: MeshAttributes) {
+fn generate_chunk_mesh(chunk: Chunk, pos: UVec3, data: &mut ChunkData, mut mesh: MeshBuilder) {
     let mut atoms_rendered = 0;
     for atom in chunk {
         if atom.is_visible() {
             atoms_rendered += 1;
-            mesh.add_face(
-                atom.pos() - pos,
-                AtomColor::from_u32(0xffffffff),
-                Direction::PosY,
-            );
-            mesh.add_face(
-                atom.pos() - pos,
-                AtomColor::from_u32(0xffffffff),
-                Direction::NegY,
-            );
-            mesh.add_face(
-                atom.pos() - pos,
-                AtomColor::from_u32(0xffffffff),
-                Direction::PosX,
-            );
-            mesh.add_face(
-                atom.pos() - pos,
-                AtomColor::from_u32(0xffffffff),
-                Direction::NegX,
-            );
-            mesh.add_face(
-                atom.pos() - pos,
-                AtomColor::from_u32(0xffffffff),
-                Direction::PosZ,
-            );
-            mesh.add_face(
-                atom.pos() - pos,
-                AtomColor::from_u32(0xffffffff),
-                Direction::NegZ,
-            );
+            mesh.add_face(atom.pos() - pos, atom.color, Direction::PosY);
+            mesh.add_face(atom.pos() - pos, atom.color, Direction::NegY);
+            mesh.add_face(atom.pos() - pos, atom.color, Direction::PosX);
+            mesh.add_face(atom.pos() - pos, atom.color, Direction::NegX);
+            mesh.add_face(atom.pos() - pos, atom.color, Direction::PosZ);
+            mesh.add_face(atom.pos() - pos, atom.color, Direction::NegZ);
             if atoms_rendered == data.visible_atom_count {
                 break;
             }
@@ -145,7 +119,6 @@ fn init_chunk_mesh(
 ) -> (Entity, Handle<Mesh>) {
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, Vec::<[f32; 3]>::new());
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, Vec::<[f32; 3]>::new());
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, Vec::<[f32; 4]>::new());
     let mesh = meshes.add(mesh);
 
@@ -165,31 +138,23 @@ fn init_chunk_mesh(
     (entity, mesh)
 }
 
-struct MeshAttributes<'a> {
+struct MeshBuilder<'a> {
     position: &'a mut Vec<[f32; 3]>,
-    normal: &'a mut Vec<[f32; 3]>,
     color: &'a mut Vec<[f32; 4]>,
 }
 
-impl<'a> MeshAttributes<'a> {
-    fn extract(mesh: &mut Mesh) -> MeshAttributes<'_> {
+impl<'a> MeshBuilder<'a> {
+    fn extract(mesh: &mut Mesh) -> MeshBuilder<'_> {
         let mut position = None;
-        let mut normal = None;
         let mut color = None;
 
         for (id, values) in mesh.attributes_mut() {
             if id == Mesh::ATTRIBUTE_POSITION.id {
                 let VertexAttributeValues::Float32x3(p) = values else { panic!(
-                    "position should be `Float32x3` but is `{}``",
+                   "position should be `Float32x3` but is `{}``",
                     values.enum_variant_name()
                 ) };
                 position = Some(p);
-            } else if id == Mesh::ATTRIBUTE_NORMAL.id {
-                let VertexAttributeValues::Float32x3(n) = values else { panic!(
-                    "normal should be `Float32x3` but is `{}``",
-                    values.enum_variant_name()
-                ) };
-                normal = Some(n);
             } else if id == Mesh::ATTRIBUTE_COLOR.id {
                 let VertexAttributeValues::Float32x4(p) = values else { panic!(
                     "color should be `Float32x4` but is `{}``",
@@ -202,14 +167,21 @@ impl<'a> MeshAttributes<'a> {
         }
 
         let position = position.expect("Terrain mesh missing position");
-        let normal = normal.expect("Terrain mesh missing normal");
         let color = color.expect("Terrain mesh missing color");
 
-        MeshAttributes {
-            position,
-            normal,
-            color,
-        }
+        MeshBuilder { position, color }
+    }
+
+    fn clear(&mut self) {
+        self.position.clear();
+        self.color.clear();
+    }
+
+    fn reserve(&mut self, faces: usize) {
+        // 6 vertices per face.
+        let num_vertices = faces * 6;
+        self.position.reserve(num_vertices);
+        self.color.reserve(num_vertices);
     }
 
     fn add_face(&mut self, pos: UVec3, color: AtomColor, direction: Direction) {
@@ -228,21 +200,39 @@ impl<'a> MeshAttributes<'a> {
             center + tangent + bitangent,
         ];
 
-        self.add_quad(corners, normal, color);
+        self.add_quad(corners, color.to_mesh_color(direction.shading()));
     }
 
     /// 0-1
     /// |/|
     /// 2-3
-    fn add_quad(&mut self, corners: [Vec3; 4], normal: Vec3, color: AtomColor) {
+    fn add_quad(&mut self, corners: [Vec3; 4], color: [f32; 4]) {
         let points = corners.map(|p| p.to_array());
         self.position.extend([
             points[2], points[1], points[0], points[2], points[3], points[1],
         ]);
-        self.normal.extend(iter::repeat(normal.to_array()).take(6));
-        self.color
-            .extend(iter::repeat(color.to_mesh_color()).take(6));
+        self.color.extend(iter::repeat(color).take(6));
     }
+}
+
+pub fn cube() -> Mesh {
+    let mut position = Vec::new();
+    let mut color = Vec::new();
+    let mut builder = MeshBuilder {
+        position: &mut position,
+        color: &mut color,
+    };
+
+    builder.reserve(6);
+    for direction in Direction::DIRECTIONS {
+        builder.add_face(UVec3::ZERO, AtomColor::WHITE, direction);
+    }
+
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, position);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, color);
+
+    mesh
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -256,6 +246,23 @@ enum Direction {
 }
 
 impl Direction {
+    const DIRECTIONS: [Self; 6] = [
+        Direction::PosX,
+        Direction::NegX,
+        Direction::PosY,
+        Direction::NegY,
+        Direction::PosZ,
+        Direction::NegZ,
+    ];
+
+    const fn shading(self) -> f32 {
+        match self {
+            Direction::PosX | Direction::NegX => 0.8,
+            Direction::PosY | Direction::NegY => 0.9834,
+            Direction::PosZ | Direction::NegZ => 0.88,
+        }
+    }
+
     const fn normal(self) -> Vec3 {
         match self {
             Direction::PosX => Vec3::X,

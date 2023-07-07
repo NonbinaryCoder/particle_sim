@@ -22,7 +22,7 @@ impl<T> Array3d<T, SimpleCurve> {
         Array3d::new_with_curve(size, SimpleCurve)
     }
 
-    pub fn size(&self) -> UVec3 {
+    pub const fn size(&self) -> UVec3 {
         self.size
     }
 

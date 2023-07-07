@@ -15,7 +15,7 @@ type AtomsCurve = array3d::SimpleCurve;
 type ChunksCurve = array3d::SimpleCurve;
 type ChunksCurveIterMut<'a> = array3d::SimpleCurveIterMut<'a, ChunkData>;
 
-pub const DEFAULT_SIZE: UVec3 = UVec3::new(128, 48, 128);
+pub const DEFAULT_SIZE: UVec3 = UVec3::new(128, 48, 256);
 
 #[derive(Debug, Clone, Resource)]
 pub struct Atoms {
@@ -98,6 +98,10 @@ impl Atoms {
             chunk_iter: self.chunks.iter_mut_labeled(),
             atoms: &self.atoms,
         }
+    }
+
+    pub const fn size(&self) -> UVec3 {
+        self.atoms.size()
     }
 }
 

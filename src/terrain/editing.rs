@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::player::{MoveEntitySet, Player};
+use crate::player::{Player, PlayerUpdateSet};
 
 use super::{color::AtomColor, storage::Atoms, Atom};
 
@@ -8,7 +8,7 @@ pub struct EditingPlugin;
 
 impl Plugin for EditingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(place_atom_system.after(MoveEntitySet::Move));
+        app.add_system(place_atom_system.after(PlayerUpdateSet::Move));
     }
 }
 

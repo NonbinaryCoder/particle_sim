@@ -7,7 +7,7 @@ use self::{color::AtomColor, storage::Atoms};
 mod color;
 mod editing;
 mod rendering;
-mod storage;
+pub mod storage;
 
 pub struct TerrainPlugin;
 

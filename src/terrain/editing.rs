@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::player::{Player, PlayerUpdateSet};
+use crate::player::{LookPos, Player, PlayerUpdateSet};
 
 use super::{color::AtomColor, storage::Atoms, Atom};
 
@@ -14,36 +14,37 @@ impl Plugin for EditingPlugin {
 
 pub fn place_atom_system(
     mut world: ResMut<Atoms>,
-    player_query: Query<&Transform, With<Player>>,
+    player_query: Query<&LookPos, With<Player>>,
     keys: Res<Input<KeyCode>>,
 ) {
-    let pos = world
-        .world_pos_to_grid_pos(player_query.single().translation)
-        .as_uvec3();
-    if world.contains_pos(pos) {
-        if keys.just_pressed(KeyCode::Q) {
-            world.set(pos, Atom::default());
-        } else if keys.just_pressed(KeyCode::E) {
-            world.set(
-                pos,
-                Atom {
-                    color: AtomColor::WHITE,
-                },
-            );
-        } else if keys.just_pressed(KeyCode::Z) {
-            world.set(
-                pos,
-                Atom {
-                    color: AtomColor::from_u32(0xff0000ff),
-                },
-            );
-        } else if keys.just_pressed(KeyCode::X) {
-            world.set(
-                pos,
-                Atom {
-                    color: AtomColor::from_u32(0x00ff00ff),
-                },
-            );
+    let look_pos = player_query.single();
+    if let Some(pos) = &look_pos.0 {
+        let pos = (pos.grid + pos.direction.normal_ivec()).as_uvec3();
+        if world.contains_pos(pos) {
+            if keys.just_pressed(KeyCode::Q) {
+                world.set(pos, Atom::default());
+            } else if keys.just_pressed(KeyCode::E) {
+                world.set(
+                    pos,
+                    Atom {
+                        color: AtomColor::WHITE,
+                    },
+                );
+            } else if keys.just_pressed(KeyCode::Z) {
+                world.set(
+                    pos,
+                    Atom {
+                        color: AtomColor::from_u32(0xff0000ff),
+                    },
+                );
+            } else if keys.just_pressed(KeyCode::X) {
+                world.set(
+                    pos,
+                    Atom {
+                        color: AtomColor::from_u32(0x00ff00ff),
+                    },
+                );
+            }
         }
     }
 }

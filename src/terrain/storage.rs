@@ -75,10 +75,6 @@ impl Atoms {
         )
     }
 
-    pub fn world_pos_to_grid_pos(&self, pos: Vec3) -> IVec3 {
-        pos.as_ivec3()
-    }
-
     pub fn contains_pos(&self, pos: UVec3) -> bool {
         pos.x < self.size().x && pos.y < self.size().y && pos.z < self.size().z
     }

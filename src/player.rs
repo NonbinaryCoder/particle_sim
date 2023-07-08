@@ -149,14 +149,14 @@ fn apply_friction_system(mut query: Query<&mut Momentum>) {
 
 /// The atom and world pos the player is currently looking at.
 #[derive(Debug, Default, Clone, Component)]
-pub struct LookPos(Option<LookPosInner>);
+pub struct LookPos(pub Option<LookPosInner>);
 
 #[derive(Debug, Clone)]
 /// The atom and world pos the player is currently looking at.
 pub struct LookPosInner {
-    world: Vec3,
-    grid: IVec3,
-    direction: Direction,
+    pub world: Vec3,
+    pub grid: IVec3,
+    pub direction: Direction,
 }
 
 /// Updates information about what atom the player is currently looking at.

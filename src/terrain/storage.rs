@@ -31,17 +31,10 @@ impl Default for Atoms {
             DEFAULT_SIZE,
             DEFAULT_SIZE / CHUNK_SIZE as u32 * CHUNK_SIZE as u32
         );
-        let mut s = Self {
+        Self {
             atoms: Array3d::new(DEFAULT_SIZE),
             chunks: Array3d::new(DEFAULT_SIZE / CHUNK_SIZE as u32),
-        };
-        s.set(
-            UVec3::ZERO,
-            Atom {
-                color: crate::terrain::color::AtomColor::from_u32(0xffffffff),
-            },
-        );
-        s
+        }
     }
 }
 

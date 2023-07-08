@@ -75,15 +75,12 @@ impl Atoms {
         )
     }
 
-    pub fn world_pos_to_atom_pos(&self, pos: Vec3) -> Option<UVec3> {
-        (pos.x > 0.0 && pos.y > 0.0 && pos.z > 0.0)
-            .then(|| pos.as_uvec3())
-            .and_then(|pos| {
-                (pos.x < self.atoms.size().x
-                    && pos.y < self.atoms.size().y
-                    && pos.z < self.atoms.size().z)
-                    .then_some(pos)
-            })
+    pub fn world_pos_to_grid_pos(&self, pos: Vec3) -> IVec3 {
+        pos.as_ivec3()
+    }
+
+    pub fn contains_pos(&self, pos: UVec3) -> bool {
+        pos.x < self.size().x && pos.y < self.size().y && pos.z < self.size().z
     }
 
     pub fn chunks(&mut self) -> Chunks {

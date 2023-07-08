@@ -4,7 +4,10 @@ use std::{f32::consts::PI, mem};
 
 use bevy::prelude::*;
 
-use crate::{terrain::storage::Atoms, ui::CursorGrabbed};
+use crate::{
+    terrain::{storage::Atoms, Direction},
+    ui::CursorGrabbed,
+};
 
 use self::{
     bindings::{Binding, Bindings},
@@ -152,6 +155,8 @@ pub struct LookPos(Option<LookPosInner>);
 /// The atom and world pos the player is currently looking at.
 pub struct LookPosInner {
     world: Vec3,
+    grid: IVec3,
+    direction: Direction,
 }
 
 /// Updates information about what atom the player is currently looking at.
@@ -180,8 +185,14 @@ fn player_look_pos_system(
         return;
     }
 
-    if let Some(world) = wall_look_pos(floor, ray, world_size) {
-        *look_pos = LookPos(Some(LookPosInner { world }))
+    if let Some((world_pos, grid_pos, direction)) =
+        wall_look_pos(floor, ray, world_size, world.size())
+    {
+        *look_pos = LookPos(Some(LookPosInner {
+            world: world_pos,
+            grid: grid_pos,
+            direction,
+        }))
     } else {
         *look_pos = LookPos(None);
     }
@@ -192,11 +203,26 @@ fn is_looking_at_floor_bottom(mut floor: Rect3d, ray: Ray) -> bool {
     floor.collides(&ray)
 }
 
-fn wall_look_pos(floor: Rect3d, ray: Ray, world_size: Vec3) -> Option<Vec3> {
+fn wall_look_pos(
+    floor: Rect3d,
+    ray: Ray,
+    world_size: Vec3,
+    grid_size: UVec3,
+) -> Option<(Vec3, IVec3, Direction)> {
     macro_rules! return_if_some {
-        ($e:expr) => {
+        ($e:expr, $xyz:ident = $val:expr, $d:expr) => {
             match $e {
-                v @ Some(_) => return v,
+                Some(v) => {
+                    return Some((
+                        v,
+                        {
+                            let mut pos = v.round().as_ivec3();
+                            pos.$xyz = $val;
+                            pos
+                        },
+                        $d,
+                    ))
+                }
                 None => (),
             }
         };
@@ -208,8 +234,12 @@ fn wall_look_pos(floor: Rect3d, ray: Ray, world_size: Vec3) -> Option<Vec3> {
         rect
     }
 
-    return_if_some!(floor.collision_point(&ray));
-    return_if_some!(flip(floor, Vec3::Y * world_size.y).collision_point(&ray));
+    return_if_some!(floor.collision_point(&ray), y = -1, Direction::PosY);
+    return_if_some!(
+        flip(floor, Vec3::Y * world_size.y).collision_point(&ray),
+        y = grid_size.y as i32,
+        Direction::NegY
+    );
 
     let extents_a = Vec3::Y * world_size.y;
     let extents_b = Vec3::Z * world_size.z;
@@ -219,8 +249,12 @@ fn wall_look_pos(floor: Rect3d, ray: Ray, world_size: Vec3) -> Option<Vec3> {
         extents_b,
     };
 
-    return_if_some!(wall_x.collision_point(&ray));
-    return_if_some!(flip(wall_x, Vec3::X * world_size.x).collision_point(&ray));
+    return_if_some!(wall_x.collision_point(&ray), x = -1, Direction::PosX);
+    return_if_some!(
+        flip(wall_x, Vec3::X * world_size.x).collision_point(&ray),
+        x = grid_size.x as i32,
+        Direction::NegX
+    );
 
     let extents_a = Vec3::X * world_size.x;
     let extents_b = Vec3::Y * world_size.y;
@@ -230,6 +264,12 @@ fn wall_look_pos(floor: Rect3d, ray: Ray, world_size: Vec3) -> Option<Vec3> {
         extents_b,
     };
 
-    return_if_some!(wall_z.collision_point(&ray));
-    flip(wall_z, Vec3::Z * world_size.z).collision_point(&ray)
+    return_if_some!(wall_z.collision_point(&ray), z = -1, Direction::PosZ);
+    return_if_some!(
+        flip(wall_z, Vec3::Z * world_size.z).collision_point(&ray),
+        z = grid_size.z as i32,
+        Direction::NegZ
+    );
+
+    None
 }

@@ -1,5 +1,7 @@
+use std::fmt::Display;
+
 use bevy::{prelude::*, window::CursorGrabMode};
-use bevy_egui::egui::{self, Response, Ui, Widget};
+use bevy_egui::egui::{self, emath::Numeric, Response, Ui, Widget};
 
 use crate::player::bindings::{self, Binding, Bindings};
 
@@ -41,14 +43,27 @@ fn toggle_cursor_grab_system(
     }
 }
 
-pub struct Vec3Widget<'a>(pub &'a mut Vec3);
+pub struct ArrayWidget<'a, T, const N: usize>(pub &'a [T; N]);
 
-impl<'a> Widget for Vec3Widget<'a> {
+impl<'a, T: Display, const N: usize> Widget for ArrayWidget<'a, T, N> {
     fn ui(self, ui: &mut Ui) -> Response {
         ui.horizontal(|ui| {
-            ui.add(egui::DragValue::new(&mut self.0.x));
-            ui.add(egui::DragValue::new(&mut self.0.y));
-            ui.add(egui::DragValue::new(&mut self.0.z));
+            for val in self.0 {
+                ui.label(val.to_string());
+            }
+        })
+        .response
+    }
+}
+
+pub struct ArrayMutWidget<'a, T, const N: usize>(pub &'a mut [T; N]);
+
+impl<'a, T: Numeric, const N: usize> Widget for ArrayMutWidget<'a, T, N> {
+    fn ui(self, ui: &mut Ui) -> Response {
+        ui.horizontal(|ui| {
+            for val in self.0 {
+                ui.add(egui::DragValue::new(val));
+            }
         })
         .response
     }

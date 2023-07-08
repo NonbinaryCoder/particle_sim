@@ -17,7 +17,10 @@ pub fn place_atom_system(
     player_query: Query<&Transform, With<Player>>,
     keys: Res<Input<KeyCode>>,
 ) {
-    if let Some(pos) = world.world_pos_to_atom_pos(player_query.single().translation) {
+    let pos = world
+        .world_pos_to_grid_pos(player_query.single().translation)
+        .as_uvec3();
+    if world.contains_pos(pos) {
         if keys.just_pressed(KeyCode::Q) {
             world.set(pos, Atom::default());
         } else if keys.just_pressed(KeyCode::E) {

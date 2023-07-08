@@ -8,6 +8,7 @@ use bevy::{
 use crate::terrain::{
     color::AtomColor,
     storage::{Atoms, Chunk},
+    Direction,
 };
 
 use super::{ChunkData, TerrainMaterials};
@@ -233,66 +234,4 @@ pub fn cube() -> Mesh {
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, color);
 
     mesh
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Direction {
-    PosX,
-    NegX,
-    PosY,
-    NegY,
-    PosZ,
-    NegZ,
-}
-
-impl Direction {
-    const DIRECTIONS: [Self; 6] = [
-        Direction::PosX,
-        Direction::NegX,
-        Direction::PosY,
-        Direction::NegY,
-        Direction::PosZ,
-        Direction::NegZ,
-    ];
-
-    const fn shading(self) -> f32 {
-        match self {
-            Direction::PosX | Direction::NegX => 0.8,
-            Direction::PosY | Direction::NegY => 0.9834,
-            Direction::PosZ | Direction::NegZ => 0.88,
-        }
-    }
-
-    const fn normal(self) -> Vec3 {
-        match self {
-            Direction::PosX => Vec3::X,
-            Direction::NegX => Vec3::NEG_X,
-            Direction::PosY => Vec3::Y,
-            Direction::NegY => Vec3::NEG_Y,
-            Direction::PosZ => Vec3::Z,
-            Direction::NegZ => Vec3::NEG_Z,
-        }
-    }
-
-    const fn tangent(self) -> Vec3 {
-        match self {
-            Direction::PosX => Vec3::Z,
-            Direction::NegX => Vec3::Y,
-            Direction::PosY => Vec3::X,
-            Direction::NegY => Vec3::Z,
-            Direction::PosZ => Vec3::Y,
-            Direction::NegZ => Vec3::X,
-        }
-    }
-
-    const fn bitangent(self) -> Vec3 {
-        match self {
-            Direction::PosX => Vec3::Y,
-            Direction::NegX => Vec3::Z,
-            Direction::PosY => Vec3::Z,
-            Direction::NegY => Vec3::X,
-            Direction::PosZ => Vec3::X,
-            Direction::NegZ => Vec3::Y,
-        }
-    }
 }

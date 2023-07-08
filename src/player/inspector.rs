@@ -23,5 +23,7 @@ fn player_inspector_system(
         .show(contexts.ctx_mut(), |ui| {
             ui.label("Position:");
             ui.add(Vec3Widget(&mut transform.translation));
+            ui.label("Looking:");
+            ui.add(Vec3Widget(&mut transform.forward()));
         });
 }

@@ -8,6 +8,7 @@ pub trait CollisionPoint<Rhs>: Collides<Rhs> {
     fn collision_point(&self, rhs: &Rhs) -> Option<Vec3>;
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Plane {
     pub normal: Vec3,
     pub origin: Vec3,
@@ -16,22 +17,13 @@ pub struct Plane {
 impl Collides<Ray> for Plane {
     fn collides(&self, ray: &Ray) -> bool {
         let is_above = ray.origin.dot(self.normal) > 0.0;
-        // let is_looking_at_plane = self.normal.dot(ray.direction) < 0.0;
-        // is_above && is_looking_at_plane
         is_above && ray.intersect_plane(self.origin, self.normal).is_some()
     }
 }
 
 impl CollisionPoint<Ray> for Plane {
     fn collision_point(&self, ray: &Ray) -> Option<Vec3> {
-        // self.collides(ray).then(|| {
-        //     let perp = self.normal.any_orthonormal_vector();
-        //     let plane_pos = self.normal * self.height;
-        //     let distance =
-        //         ((plane_pos - ray.origin).dot(self.normal)) / (ray.direction.dot(self.normal));
-        //     ray.intersect_plane(, )
-        // })
-        let is_above = ray.origin.dot(self.normal) > 0.0;
+        let is_above = (ray.origin - self.origin).dot(self.normal) > 0.0;
         is_above
             .then(|| ray.intersect_plane(self.origin, self.normal))
             .flatten()
@@ -39,6 +31,7 @@ impl CollisionPoint<Ray> for Plane {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Rect3d {
     pub origin: Vec3,
     pub extents_a: Vec3,

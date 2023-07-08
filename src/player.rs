@@ -1,6 +1,6 @@
 //! Player controller.
 
-use std::f32::consts::PI;
+use std::{f32::consts::PI, mem};
 
 use bevy::prelude::*;
 
@@ -8,7 +8,7 @@ use crate::{terrain::storage::Atoms, ui::CursorGrabbed};
 
 use self::{
     bindings::{Binding, Bindings},
-    physics::{CollisionPoint, Rect3d},
+    physics::{Collides, CollisionPoint, Rect3d},
 };
 
 pub mod bindings;
@@ -160,19 +160,76 @@ fn player_look_pos_system(
     mut player_query: Query<(&mut LookPos, &Transform), With<Player>>,
 ) {
     let (mut look_pos, transform) = player_query.single_mut();
+
     let ray = Ray {
         origin: transform.translation,
         direction: transform.forward(),
     };
-    let extents_a = Vec3::Z * world.size().z as f32;
-    let extents_b = Vec3::X * world.size().x as f32;
-    *look_pos = LookPos(
-        Rect3d {
-            origin: (extents_a + extents_b) * 0.5 - Vec3::splat(0.5),
-            extents_a,
-            extents_b,
-        }
-        .collision_point(&ray)
-        .map(|world| LookPosInner { world }),
-    )
+
+    let world_size = world.size().as_vec3();
+    let extents_a = Vec3::Z * world_size.z;
+    let extents_b = Vec3::X * world_size.x;
+    let floor = Rect3d {
+        origin: (extents_a + extents_b) * 0.5 - Vec3::splat(0.5),
+        extents_a,
+        extents_b,
+    };
+
+    if is_looking_at_floor_bottom(floor, ray) {
+        *look_pos = LookPos(None);
+        return;
+    }
+
+    if let Some(world) = wall_look_pos(floor, ray, world_size) {
+        *look_pos = LookPos(Some(LookPosInner { world }))
+    } else {
+        *look_pos = LookPos(None);
+    }
+}
+
+fn is_looking_at_floor_bottom(mut floor: Rect3d, ray: Ray) -> bool {
+    mem::swap(&mut floor.extents_a, &mut floor.extents_b);
+    floor.collides(&ray)
+}
+
+fn wall_look_pos(floor: Rect3d, ray: Ray, world_size: Vec3) -> Option<Vec3> {
+    macro_rules! return_if_some {
+        ($e:expr) => {
+            match $e {
+                v @ Some(_) => return v,
+                None => (),
+            }
+        };
+    }
+
+    fn flip(mut rect: Rect3d, movement: Vec3) -> Rect3d {
+        mem::swap(&mut rect.extents_a, &mut rect.extents_b);
+        rect.origin += movement;
+        rect
+    }
+
+    return_if_some!(floor.collision_point(&ray));
+    return_if_some!(flip(floor, Vec3::Y * world_size.y).collision_point(&ray));
+
+    let extents_a = Vec3::Y * world_size.y;
+    let extents_b = Vec3::Z * world_size.z;
+    let wall_x = Rect3d {
+        origin: (extents_a + extents_b) * 0.5 - Vec3::splat(0.5),
+        extents_a,
+        extents_b,
+    };
+
+    return_if_some!(wall_x.collision_point(&ray));
+    return_if_some!(flip(wall_x, Vec3::X * world_size.x).collision_point(&ray));
+
+    let extents_a = Vec3::X * world_size.x;
+    let extents_b = Vec3::Y * world_size.y;
+    let wall_z = Rect3d {
+        origin: (extents_a + extents_b) * 0.5 - Vec3::splat(0.5),
+        extents_a,
+        extents_b,
+    };
+
+    return_if_some!(wall_z.collision_point(&ray));
+    flip(wall_z, Vec3::Z * world_size.z).collision_point(&ray)
 }

@@ -6,7 +6,7 @@ use crate::terrain::rendering::CHUNK_SIZE;
 
 use self::array3d::Array3d;
 
-use super::{rendering::ChunkData, Atom};
+use super::{rendering::ChunkData, Atom, Direction};
 
 mod array3d;
 
@@ -89,6 +89,100 @@ impl Atoms {
     pub const fn size(&self) -> UVec3 {
         self.atoms.size()
     }
+
+    pub fn raycast(&self, ray: Ray, mut hit: impl FnMut(&Atom) -> bool) -> Option<RaycastHit> {
+        // From "A Fast Voxel Traversal Algorithm for Ray Tracing" by John
+        // Amanatides and Andrew Woo, 1987.
+        // [http://www.cse.yorku.ca/~amana/research/grid.pdf]
+        // [http://citeseer.ist.psu.edu/viewdoc/summary?doi=10.1.1.42.3443]
+
+        debug_assert!(ray.direction.is_normalized());
+
+        /* Initialization */
+        let mut atom = super::world_to_grid_pos(ray.origin);
+        let step = ray.direction.signum();
+        let atom_f32 = atom.as_vec3();
+        let next_voxel_boundary = atom_f32 + step * 0.5;
+        let next_voxel_boundary = next_voxel_boundary
+            + Vec3::select(next_voxel_boundary.cmpeq(ray.origin), step, Vec3::ZERO);
+        let mut t_max = Vec3 {
+            x: ray
+                .intersect_plane(next_voxel_boundary, Vec3::X * step)
+                .unwrap_or(f32::INFINITY),
+            y: ray
+                .intersect_plane(next_voxel_boundary, Vec3::Y * step)
+                .unwrap_or(f32::INFINITY),
+            z: ray
+                .intersect_plane(next_voxel_boundary, Vec3::Z * step)
+                .unwrap_or(f32::INFINITY),
+        };
+        let ray_dir = Ray {
+            origin: Vec3::ZERO,
+            ..ray
+        };
+        let t_delta = Vec3 {
+            x: ray_dir
+                .intersect_plane(Vec3::X * step, Vec3::X * step)
+                .unwrap_or(f32::INFINITY),
+            y: ray_dir
+                .intersect_plane(Vec3::Y * step, Vec3::Y * step)
+                .unwrap_or(f32::INFINITY),
+            z: ray_dir
+                .intersect_plane(Vec3::Z * step, Vec3::Z * step)
+                .unwrap_or(f32::INFINITY),
+        };
+        let step = step.as_ivec3();
+
+        /* Incremental */
+        macro_rules! process {
+            ($v:ident, $pos:ident | $neg:ident) => {
+                atom.$v += step.$v;
+                t_max.$v += t_delta.$v;
+                if !self.contains_pos(atom.as_uvec3()) {
+                    return Some(RaycastHit {
+                        grid_pos: atom,
+                        side: if step.$v == 1 {
+                            Direction::$pos
+                        } else {
+                            Direction::$neg
+                        },
+                        is_wall: true,
+                    });
+                }
+                if hit(&self[atom]) {
+                    return Some(RaycastHit {
+                        grid_pos: atom,
+                        side: if step.$v == 1 {
+                            Direction::$pos
+                        } else {
+                            Direction::$neg
+                        },
+                        is_wall: false,
+                    });
+                }
+            };
+        }
+
+        // Limit iterations to not get stuck in loop.
+        #[allow(clippy::collapsible_else_if)]
+        for _ in 0..128 {
+            if t_max.x < t_max.y {
+                if t_max.x < t_max.z {
+                    process!(x, NegX | PosX);
+                } else {
+                    process!(z, NegZ | PosZ);
+                }
+            } else {
+                if t_max.y < t_max.z {
+                    process!(y, NegY | PosY);
+                } else {
+                    process!(z, NegZ | PosZ);
+                }
+            }
+        }
+
+        None
+    }
 }
 
 pub struct Chunks<'a> {
@@ -161,6 +255,13 @@ impl<'a> AtomRef<'a> {
     pub fn pos(&self) -> UVec3 {
         self.pos
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RaycastHit {
+    pub grid_pos: IVec3,
+    pub side: Direction,
+    pub is_wall: bool,
 }
 
 #[cfg(test)]

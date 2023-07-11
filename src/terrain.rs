@@ -26,14 +26,16 @@ pub struct Atom {
 
 impl Default for Atom {
     fn default() -> Self {
-        Self {
-            color: AtomColor::INVISIBLE,
-        }
+        Self::AIR
     }
 }
 
 impl Atom {
     pub const VOID: Self = Self {
+        color: AtomColor::INVISIBLE,
+    };
+
+    pub const AIR: Self = Self {
         color: AtomColor::INVISIBLE,
     };
 
@@ -113,4 +115,8 @@ impl Direction {
             Direction::NegZ => Vec3::Y,
         }
     }
+}
+
+fn world_to_grid_pos(pos: Vec3) -> IVec3 {
+    pos.round().as_ivec3()
 }

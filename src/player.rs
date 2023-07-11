@@ -5,13 +5,16 @@ use std::{f32::consts::PI, mem};
 use bevy::prelude::*;
 
 use crate::{
-    terrain::{storage::Atoms, Direction},
+    terrain::{
+        storage::{Atoms, RaycastHit},
+        Direction,
+    },
     ui::CursorGrabbed,
 };
 
 use self::{
     bindings::{Binding, Bindings},
-    physics::{Collides, CollisionPoint, Rect3d},
+    physics::{CollisionPoint, Rect3d},
 };
 
 pub mod bindings;
@@ -149,15 +152,7 @@ fn apply_friction_system(mut query: Query<&mut Momentum>) {
 
 /// The atom and world pos the player is currently looking at.
 #[derive(Debug, Default, Clone, Component)]
-pub struct LookPos(pub Option<LookPosInner>);
-
-#[derive(Debug, Clone)]
-/// The atom and world pos the player is currently looking at.
-pub struct LookPosInner {
-    pub world: Vec3,
-    pub grid: IVec3,
-    pub direction: Direction,
-}
+pub struct LookPos(pub Option<RaycastHit>);
 
 /// Updates information about what atom the player is currently looking at.
 fn player_look_pos_system(
@@ -172,35 +167,15 @@ fn player_look_pos_system(
     };
 
     let world_size = world.size().as_vec3();
-    let extents_a = Vec3::Z * world_size.z;
-    let extents_b = Vec3::X * world_size.x;
+    let extents_a = Vec3::X * world_size.x;
+    let extents_b = Vec3::Z * world_size.z;
     let floor = Rect3d {
         origin: (extents_a + extents_b) * 0.5 - Vec3::splat(0.5),
         extents_a,
         extents_b,
     };
 
-    if is_looking_at_floor_bottom(floor, ray) {
-        *look_pos = LookPos(None);
-        return;
-    }
-
-    if let Some((world_pos, grid_pos, direction)) =
-        wall_look_pos(floor, ray, world_size, world.size())
-    {
-        *look_pos = LookPos(Some(LookPosInner {
-            world: world_pos,
-            grid: grid_pos,
-            direction,
-        }))
-    } else {
-        *look_pos = LookPos(None);
-    }
-}
-
-fn is_looking_at_floor_bottom(mut floor: Rect3d, ray: Ray) -> bool {
-    mem::swap(&mut floor.extents_a, &mut floor.extents_b);
-    floor.collides(&ray)
+    look_pos.0 = world.raycast(ray, |atom| atom.is_visible());
 }
 
 fn wall_look_pos(
@@ -234,15 +209,14 @@ fn wall_look_pos(
         rect
     }
 
-    return_if_some!(floor.collision_point(&ray), y = -1, Direction::PosY);
     return_if_some!(
         flip(floor, Vec3::Y * world_size.y).collision_point(&ray),
         y = grid_size.y as i32,
         Direction::NegY
     );
 
-    let extents_a = Vec3::Y * world_size.y;
-    let extents_b = Vec3::Z * world_size.z;
+    let extents_a = Vec3::Z * world_size.z;
+    let extents_b = Vec3::Y * world_size.y;
     let wall_x = Rect3d {
         origin: (extents_a + extents_b) * 0.5 - Vec3::splat(0.5),
         extents_a,
@@ -256,8 +230,8 @@ fn wall_look_pos(
         Direction::NegX
     );
 
-    let extents_a = Vec3::X * world_size.x;
-    let extents_b = Vec3::Y * world_size.y;
+    let extents_a = Vec3::Y * world_size.y;
+    let extents_b = Vec3::X * world_size.x;
     let wall_z = Rect3d {
         origin: (extents_a + extents_b) * 0.5 - Vec3::splat(0.5),
         extents_a,

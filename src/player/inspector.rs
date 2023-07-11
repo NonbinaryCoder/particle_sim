@@ -32,8 +32,7 @@ fn player_inspector_system(
 
             if let Some(look_pos) = &look_pos.0 {
                 ui.label("Target:");
-                ui.add(ArrayWidget(round(look_pos.world, 2).as_ref_parts()));
-                ui.add(ArrayWidget(look_pos.grid.as_ref_parts()));
+                ui.add(ArrayWidget(look_pos.grid_pos.as_ref_parts()));
             }
         });
 }

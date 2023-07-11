@@ -52,17 +52,18 @@ fn update_look_pos_marker_system(
 ) {
     let pos = player_query.single();
     for (mut transform, mut visibility) in &mut marker_query {
+        #[allow(clippy::collapsible_else_if)]
         if transform.scale.x < 0.5 {
             if let Some(pos) = &pos.0 {
                 *visibility = Visibility::Visible;
-                transform.translation = pos.world;
+                transform.translation = pos.grid_pos.as_vec3() + pos.side.normal() * 0.5;
             } else {
                 *visibility = Visibility::Hidden;
             }
         } else {
             if let Some(pos) = &pos.0 {
                 *visibility = Visibility::Visible;
-                transform.translation = pos.grid.as_vec3();
+                transform.translation = pos.grid_pos.as_vec3();
             } else {
                 *visibility = Visibility::Hidden;
             }

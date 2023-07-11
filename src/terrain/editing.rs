@@ -19,27 +19,30 @@ pub fn place_atom_system(
 ) {
     let look_pos = player_query.single();
     if let Some(pos) = &look_pos.0 {
-        let pos = (pos.grid + pos.direction.normal_ivec()).as_uvec3();
-        if world.contains_pos(pos) {
+        let place_pos = (pos.grid_pos + pos.side.normal_ivec()).as_uvec3();
+        if world.contains_pos(place_pos) {
             if keys.just_pressed(KeyCode::Q) {
-                world.set(pos, Atom::default());
+                let pos = pos.grid_pos.as_uvec3();
+                if world.contains_pos(pos) {
+                    world.set(pos, Atom::AIR);
+                }
             } else if keys.just_pressed(KeyCode::E) {
                 world.set(
-                    pos,
+                    place_pos,
                     Atom {
                         color: AtomColor::WHITE,
                     },
                 );
             } else if keys.just_pressed(KeyCode::Z) {
                 world.set(
-                    pos,
+                    place_pos,
                     Atom {
                         color: AtomColor::from_u32(0xff0000ff),
                     },
                 );
             } else if keys.just_pressed(KeyCode::X) {
                 world.set(
-                    pos,
+                    place_pos,
                     Atom {
                         color: AtomColor::from_u32(0x00ff00ff),
                     },

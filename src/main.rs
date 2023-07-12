@@ -7,12 +7,14 @@ mod ui;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
-        .add_plugin(EguiPlugin)
-        .add_plugin(terrain::TerrainPlugin)
-        .add_plugin(player::PlayerPlugin)
-        .add_plugin(ui::UiPlugin)
-        .add_startup_system(setup_window_system)
+        .add_plugins((
+            DefaultPlugins,
+            EguiPlugin,
+            terrain::TerrainPlugin,
+            player::PlayerPlugin,
+            ui::UiPlugin,
+        ))
+        .add_systems(Startup, setup_window_system)
         .run();
 }
 

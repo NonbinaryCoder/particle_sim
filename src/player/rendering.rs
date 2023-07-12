@@ -6,8 +6,11 @@ pub struct RenderingPlugin;
 
 impl Plugin for RenderingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(spawn_look_pos_marker_system)
-            .add_system(update_look_pos_marker_system.after(PlayerUpdateSet::TargetPos));
+        app.add_systems(Startup, spawn_look_pos_marker_system)
+            .add_systems(
+                Update,
+                update_look_pos_marker_system.after(PlayerUpdateSet::TargetPos),
+            );
     }
 }
 

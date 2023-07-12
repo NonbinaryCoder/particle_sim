@@ -8,7 +8,7 @@ pub struct EditingPlugin;
 
 impl Plugin for EditingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(place_atom_system.after(PlayerUpdateSet::Move));
+        app.add_systems(Update, place_atom_system.after(PlayerUpdateSet::Move));
     }
 }
 

@@ -19,8 +19,8 @@ pub struct MeshGenPlugin;
 
 impl Plugin for MeshGenPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(inspector::InspectorPlugin)
-            .add_system(generate_chunk_meshes_system);
+        app.add_plugins(inspector::InspectorPlugin)
+            .add_systems(Update, generate_chunk_meshes_system);
     }
 }
 

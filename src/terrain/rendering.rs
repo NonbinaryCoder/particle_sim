@@ -1,7 +1,7 @@
 use bevy::{
     pbr::{MaterialPipeline, MaterialPipelineKey},
     prelude::*,
-    reflect::TypeUuid,
+    reflect::{TypePath, TypeUuid},
     render::{
         mesh::MeshVertexBufferLayout,
         render_resource::{
@@ -18,26 +18,22 @@ pub struct RenderingPlugin;
 
 impl Plugin for RenderingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(mesh_gen::MeshGenPlugin)
-            .add_plugin(MaterialPlugin::<TerrainMaterial>::default())
-            .add_startup_systems(
-                (
-                    create_terrain_materials_system,
-                    apply_system_buffers,
-                    create_floor_system,
-                )
-                    .chain(),
-            );
+        app.add_plugins((
+            mesh_gen::MeshGenPlugin,
+            MaterialPlugin::<TerrainMaterial>::default(),
+        ))
+        .add_systems(PreStartup, create_terrain_materials_system)
+        .add_systems(Startup, create_floor_system);
     }
 }
 
 /// Materials used by atoms and the floor.
-#[derive(Debug, Resource)]
+#[derive(Debug, Resource, TypePath)]
 struct TerrainMaterials {
     opaque: Handle<TerrainMaterial>,
 }
 
-#[derive(Debug, AsBindGroup, TypeUuid, Clone)]
+#[derive(Debug, AsBindGroup, TypeUuid, Clone, TypePath)]
 #[uuid = "46c0094b-ce2b-4c35-ac23-49388d7428ab"]
 struct TerrainMaterial {}
 

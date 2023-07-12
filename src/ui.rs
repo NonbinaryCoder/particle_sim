@@ -10,7 +10,7 @@ pub struct UiPlugin;
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CursorGrabbed>()
-            .add_system(toggle_cursor_grab_system);
+            .add_systems(PostUpdate, toggle_cursor_grab_system);
     }
 }
 

@@ -40,7 +40,7 @@ impl Default for Bindings {
             },
             up_down: Axis::Composite {
                 pos: Button::Key(KeyCode::Space),
-                neg: Button::Key(KeyCode::LControl),
+                neg: Button::Key(KeyCode::ControlLeft),
             },
 
             toggle_cursor: Button::Key(KeyCode::Escape),

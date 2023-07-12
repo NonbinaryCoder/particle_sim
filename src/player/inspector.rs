@@ -12,7 +12,7 @@ pub struct InspectorPlugin;
 
 impl Plugin for InspectorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_system(player_inspector_system);
+        app.add_systems(Update, player_inspector_system);
     }
 }
 

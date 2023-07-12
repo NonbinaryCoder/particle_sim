@@ -26,32 +26,37 @@ pub struct PlayerPlugin;
 
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(inspector::InspectorPlugin)
-            .add_plugin(bindings::BindingsPlugin)
-            .add_plugin(rendering::RenderingPlugin)
-            .insert_resource(PlayerSpeed(0.5))
-            .add_startup_system(spawn_player_system)
-            .add_systems(
-                (
-                    player_look_system.run_if(resource_equals(CursorGrabbed(true))),
-                    look_direction_system,
-                )
-                    .chain()
-                    .in_set(PlayerUpdateSet::Look),
+        app.add_plugins((
+            inspector::InspectorPlugin,
+            bindings::BindingsPlugin,
+            rendering::RenderingPlugin,
+        ))
+        .insert_resource(PlayerSpeed(0.5))
+        .add_systems(Startup, spawn_player_system)
+        .add_systems(
+            Update,
+            (
+                player_look_system.run_if(resource_equals(CursorGrabbed(true))),
+                look_direction_system,
             )
-            .add_systems(
-                (player_move_system, apply_momentum_system)
-                    .chain()
-                    .in_set(PlayerUpdateSet::Move)
-                    .after(PlayerUpdateSet::Look),
+                .chain()
+                .in_set(PlayerUpdateSet::Look),
+        )
+        .add_systems(
+            Update,
+            (player_move_system, apply_momentum_system)
+                .chain()
+                .in_set(PlayerUpdateSet::Move)
+                .after(PlayerUpdateSet::Look),
+        )
+        .add_systems(
+            Update,
+            (
+                apply_friction_system,
+                player_look_pos_system.in_set(PlayerUpdateSet::TargetPos),
             )
-            .add_systems(
-                (
-                    apply_friction_system,
-                    player_look_pos_system.in_set(PlayerUpdateSet::TargetPos),
-                )
-                    .after(PlayerUpdateSet::Move),
-            );
+                .after(PlayerUpdateSet::Move),
+        );
     }
 }
 

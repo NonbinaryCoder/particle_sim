@@ -13,8 +13,7 @@ pub struct TerrainPlugin;
 
 impl Plugin for TerrainPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugin(editing::EditingPlugin)
-            .add_plugin(rendering::RenderingPlugin)
+        app.add_plugins((editing::EditingPlugin, rendering::RenderingPlugin))
             .init_resource::<Atoms>();
     }
 }

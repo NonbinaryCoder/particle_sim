@@ -31,7 +31,10 @@ impl Plugin for PlayerPlugin {
             bindings::BindingsPlugin,
             rendering::RenderingPlugin,
         ))
-        .insert_resource(PlayerSpeed(0.5))
+        .insert_resource(PlayerConfig {
+            speed: 0.5,
+            freecam_enabled: false,
+        })
         .add_systems(Startup, spawn_player_system)
         .add_systems(
             Update,
@@ -67,14 +70,26 @@ pub enum PlayerUpdateSet {
     TargetPos,
 }
 
+#[derive(Debug, Clone, Resource)]
+pub struct PlayerConfig {
+    speed: f32,
+    freecam_enabled: bool,
+}
+
 /// Marker component for the main player.
 #[derive(Debug, Component)]
 pub struct Player;
+
+/// Marker component for what entity controls effect.  Different from `Player`
+/// component because of freecam.
+#[derive(Debug, Component)]
+pub struct ControlledEntity;
 
 /// Startup system that spawns the player camera.
 fn spawn_player_system(mut commands: Commands) {
     commands.spawn((
         Player,
+        ControlledEntity,
         Camera3dBundle::default(),
         LookDirection::default(),
         Momentum::default(),
@@ -94,11 +109,11 @@ struct LookDirection {
 /// Main schedule system that updates what direction the player is looking in
 /// based on inputs.
 fn player_look_system(
-    mut player_query: Query<&mut LookDirection, With<Player>>,
+    mut query: Query<&mut LookDirection, With<ControlledEntity>>,
     bindings: Res<Bindings>,
     mut inputs: <bindings::Axis2 as Binding>::Inputs<'_, '_>,
 ) {
-    if let Ok(mut look_direction) = player_query.get_single_mut() {
+    if let Ok(mut look_direction) = query.get_single_mut() {
         let delta = bindings.look.value(&mut inputs);
         look_direction.vertical = (look_direction.vertical - delta.y).clamp(-PI * 0.5, PI * 0.5);
         look_direction.horizontal = (look_direction.horizontal - delta.x).rem_euclid(PI * 2.0);
@@ -116,15 +131,12 @@ fn look_direction_system(
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, Resource)]
-struct PlayerSpeed(f32);
-
 #[derive(Debug, Default, Clone, Copy, Component)]
 struct Momentum(Vec3);
 
 fn player_move_system(
-    mut player_query: Query<(&mut Momentum, &Transform), With<Player>>,
-    speed: Res<PlayerSpeed>,
+    mut query: Query<(&mut Momentum, &Transform), With<ControlledEntity>>,
+    config: Res<PlayerConfig>,
     bindings: Res<Bindings>,
     mut inputs: <bindings::Axis2 as Binding>::Inputs<'_, '_>,
 ) {
@@ -134,12 +146,12 @@ fn player_move_system(
         Vec3 { y: 0.0, ..v }
     }
 
-    let (mut momentum, transform) = player_query.single_mut();
+    let (mut momentum, transform) = query.single_mut();
     let local_walk = bindings.walk.value_clamped(&mut inputs);
     let global_walk = flatten(transform.forward()) * local_walk.y
         + flatten(transform.left()) * local_walk.x
         + Vec3::Y * bindings.up_down.value_clamped(inputs.as_mut());
-    momentum.0 += global_walk.normalize_or_zero() * speed.0;
+    momentum.0 += global_walk.normalize_or_zero() * config.speed;
 }
 
 fn apply_momentum_system(mut query: Query<(&Momentum, &mut Transform)>) {

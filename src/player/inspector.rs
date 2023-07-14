@@ -15,11 +15,13 @@ pub struct InspectorPlugin;
 
 impl Plugin for InspectorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PostUpdate, player_inspector_system)
-            .add_systems(
-                Update,
+        app.add_systems(
+            PostUpdate,
+            (
+                player_inspector_system,
                 player_gizmo_system.run_if(|config: Res<PlayerConfig>| config.freecam_enabled),
-            );
+            ),
+        );
     }
 }
 
@@ -85,13 +87,18 @@ fn round(val: Vec3, places: u32) -> Vec3 {
     (val * v).round() / v
 }
 
-fn player_gizmo_system(player_query: Query<&Transform, With<Player>>, mut gizmos: Gizmos) {
+fn player_gizmo_system(
+    mut gizmos: Gizmos,
+    player_query: Query<&Transform, With<Player>>,
+    config: Res<PlayerConfig>,
+) {
+    let transform = &player_query.single();
     gizmos
-        .sphere(
-            player_query.single().translation,
-            Quat::IDENTITY,
-            0.125,
-            Color::BLACK,
-        )
+        .sphere(transform.translation, Quat::IDENTITY, 0.125, Color::BLACK)
         .circle_segments(4);
+    gizmos.ray(
+        transform.translation,
+        transform.forward() * config.reach_dist,
+        Color::rgba(0.0, 0.0, 0.0, 0.5),
+    );
 }

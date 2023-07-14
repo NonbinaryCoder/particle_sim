@@ -90,7 +90,13 @@ impl Atoms {
         self.atoms.size()
     }
 
-    pub fn raycast(&self, ray: Ray, mut hit: impl FnMut(&Atom) -> bool) -> Option<RaycastHit> {
+    pub fn raycast(
+        &self,
+        ray: Ray,
+        max_dist: f32,
+        mut hit: impl FnMut(&Atom) -> bool,
+        gizmos: &mut Gizmos,
+    ) -> Option<RaycastHit> {
         // From "A Fast Voxel Traversal Algorithm for Ray Tracing" by John
         // Amanatides and Andrew Woo, 1987.
         // [http://www.cse.yorku.ca/~amana/research/grid.pdf]
@@ -137,7 +143,13 @@ impl Atoms {
         macro_rules! process {
             ($v:ident, $pos:ident | $neg:ident) => {
                 atom.$v += step.$v;
+                let dist = t_max.min_element();
+                gizmos.ray(ray.origin, ray_dir.get_point(dist), Color::BLACK);
                 t_max.$v += t_delta.$v;
+                gizmos.cuboid(
+                    Transform::from_translation(atom.as_vec3()),
+                    Color::rgb(0.0, 191.0, 255.0),
+                );
                 if !self.contains_pos(atom.as_uvec3()) {
                     return Some(RaycastHit {
                         grid_pos: atom,
@@ -146,6 +158,7 @@ impl Atoms {
                         } else {
                             Direction::$neg
                         },
+                        dist,
                         is_wall: true,
                     });
                 }
@@ -157,6 +170,7 @@ impl Atoms {
                         } else {
                             Direction::$neg
                         },
+                        dist,
                         is_wall: false,
                     });
                 }
@@ -165,7 +179,7 @@ impl Atoms {
 
         // Limit iterations to not get stuck in loop.
         #[allow(clippy::collapsible_else_if)]
-        for _ in 0..128 {
+        while t_max.min_element() <= max_dist {
             if t_max.x < t_max.y {
                 if t_max.x < t_max.z {
                     process!(x, NegX | PosX);
@@ -261,6 +275,7 @@ impl<'a> AtomRef<'a> {
 pub struct RaycastHit {
     pub grid_pos: IVec3,
     pub side: Direction,
+    pub dist: f32,
     pub is_wall: bool,
 }
 

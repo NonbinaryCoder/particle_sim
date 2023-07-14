@@ -33,6 +33,7 @@ impl Plugin for PlayerPlugin {
         ))
         .insert_resource(PlayerConfig {
             speed: 0.5,
+            reach_dist: 32.0,
             freecam_enabled: false,
         })
         .add_systems(Startup, spawn_player_system)
@@ -73,6 +74,7 @@ pub enum PlayerUpdateSet {
 #[derive(Debug, Clone, Resource)]
 pub struct PlayerConfig {
     speed: f32,
+    reach_dist: f32,
     freecam_enabled: bool,
 }
 
@@ -173,8 +175,10 @@ pub struct LookPos(pub Option<RaycastHit>);
 
 /// Updates information about what atom the player is currently looking at.
 fn player_look_pos_system(
+    mut gizmos: Gizmos,
     world: Res<Atoms>,
     mut player_query: Query<(&mut LookPos, &Transform), With<Player>>,
+    config: Res<PlayerConfig>,
 ) {
     let (mut look_pos, transform) = player_query.single_mut();
 
@@ -192,7 +196,12 @@ fn player_look_pos_system(
         extents_b,
     };
 
-    look_pos.0 = world.raycast(ray, |atom| atom.is_visible());
+    look_pos.0 = world.raycast(
+        ray,
+        config.reach_dist,
+        |atom| atom.is_visible(),
+        &mut gizmos,
+    );
 }
 
 fn wall_look_pos(

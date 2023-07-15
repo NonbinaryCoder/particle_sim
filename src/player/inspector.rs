@@ -87,18 +87,9 @@ fn round(val: Vec3, places: u32) -> Vec3 {
     (val * v).round() / v
 }
 
-fn player_gizmo_system(
-    mut gizmos: Gizmos,
-    player_query: Query<&Transform, With<Player>>,
-    config: Res<PlayerConfig>,
-) {
+fn player_gizmo_system(mut gizmos: Gizmos, player_query: Query<&Transform, With<Player>>) {
     let transform = &player_query.single();
     gizmos
         .sphere(transform.translation, Quat::IDENTITY, 0.125, Color::BLACK)
         .circle_segments(4);
-    gizmos.ray(
-        transform.translation,
-        transform.forward() * config.reach_dist,
-        Color::rgba(0.0, 0.0, 0.0, 0.5),
-    );
 }

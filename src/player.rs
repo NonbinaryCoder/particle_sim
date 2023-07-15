@@ -168,7 +168,6 @@ pub struct LookPos(pub Option<RaycastHit>);
 
 /// Updates information about what atom the player is currently looking at.
 fn player_look_pos_system(
-    mut gizmos: Gizmos,
     world: Res<Atoms>,
     mut player_query: Query<(&mut LookPos, &Transform), With<Player>>,
     config: Res<PlayerConfig>,
@@ -180,10 +179,5 @@ fn player_look_pos_system(
         direction: transform.forward(),
     };
 
-    look_pos.0 = world.raycast(
-        ray,
-        config.reach_dist,
-        |atom| atom.is_visible(),
-        &mut gizmos,
-    );
+    look_pos.0 = world.raycast(ray, config.reach_dist, |atom| atom.is_visible());
 }

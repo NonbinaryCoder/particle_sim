@@ -51,6 +51,7 @@ pub struct Rect3d {
 }
 
 impl Rect3d {
+    #[allow(dead_code)]
     pub fn gizmo(&self, color: Color, gizmos: &mut Gizmos) {
         let a = self.extents_a * 0.5;
         let b = self.extents_b * 0.5;

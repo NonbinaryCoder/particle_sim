@@ -106,9 +106,7 @@ impl Atoms {
         ray: Ray,
         max_dist: f32,
         mut hit: impl FnMut(&Atom) -> bool,
-        gizmos: &mut Gizmos,
     ) -> Option<RaycastHit> {
-        let original_ray = ray;
         let (dist, ray) = if self.contains_point(ray.origin) {
             let grid_pos = super::world_to_grid_pos(ray.origin);
             if hit(&self[grid_pos]) {
@@ -121,7 +119,7 @@ impl Atoms {
             }
             (0.0, ray)
         } else {
-            let (dist, side) = self.raycast_walls(ray, max_dist, gizmos)?;
+            let (dist, side) = self.raycast_walls(ray, max_dist)?;
             let grid_pos = super::world_to_grid_pos(ray.get_point(dist));
             if hit(&self[grid_pos]) {
                 return Some(RaycastHit {
@@ -140,40 +138,22 @@ impl Atoms {
             )
         };
 
-        self.raycast_terrain(ray, max_dist - dist, hit, gizmos)
-            .map(|hit| {
-                gizmos.cuboid(
-                    Transform::from_translation(original_ray.get_point(dist + hit.dist))
-                        .with_scale(Vec3::splat(0.1)),
-                    Color::RED,
-                );
-                RaycastHit {
-                    dist: dist + hit.dist,
-                    ..hit
-                }
+        self.raycast_terrain(ray, max_dist - dist, hit)
+            .map(|hit| RaycastHit {
+                dist: dist + hit.dist,
+                ..hit
             })
     }
 
-    fn raycast_walls(
-        &self,
-        ray: Ray,
-        max_dist: f32,
-        gizmos: &mut Gizmos,
-    ) -> Option<(f32, Direction)> {
+    fn raycast_walls(&self, ray: Ray, max_dist: f32) -> Option<(f32, Direction)> {
         let size = self.size().as_vec3();
 
         macro_rules! process {
             ($face:expr, $normal:expr, $side:ident) => {
                 let face = $face;
                 let normal = $normal;
-                face.gizmo(Color::GREEN, gizmos);
                 if ray.collides(&face) {
                     let dist = ray.intersect_plane(face.origin, normal).unwrap();
-                    gizmos.cuboid(
-                        Transform::from_translation(ray.get_point(dist))
-                            .with_scale(Vec3::splat(0.1) - normal.abs() * 0.1),
-                        Color::DARK_GREEN,
-                    );
                     return Some((dist + 1.0 / 16.0, Direction::$side))
                         .filter(|&(dist, _)| dist <= max_dist);
                 }
@@ -226,7 +206,6 @@ impl Atoms {
         ray: Ray,
         max_dist: f32,
         mut hit: impl FnMut(&Atom) -> bool,
-        gizmos: &mut Gizmos,
     ) -> Option<RaycastHit> {
         // From "A Fast Voxel Traversal Algorithm for Ray Tracing" by John
         // Amanatides and Andrew Woo, 1987.
@@ -276,10 +255,6 @@ impl Atoms {
                 atom.$v += step.$v;
                 let dist = t_max.min_element();
                 t_max.$v += t_delta.$v;
-                gizmos.cuboid(
-                    Transform::from_translation(atom.as_vec3()),
-                    Color::rgb(0.0, 191.0, 255.0),
-                );
                 if !self.contains_atom(atom.as_uvec3()) {
                     return Some(RaycastHit {
                         grid_pos: atom,

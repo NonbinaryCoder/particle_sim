@@ -11,7 +11,7 @@ pub struct InspectorPlugin;
 impl Plugin for InspectorPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(WireframePlugin)
-            .add_systems(PostUpdate, mesh_inspector_system);
+            .add_systems(Update, mesh_inspector_system);
     }
 }
 

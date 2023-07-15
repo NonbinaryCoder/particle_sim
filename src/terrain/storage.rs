@@ -1,8 +1,14 @@
-use std::ops::{Deref, Index};
+use std::{
+    mem,
+    ops::{Deref, Index},
+};
 
 use bevy::prelude::*;
 
-use crate::terrain::rendering::CHUNK_SIZE;
+use crate::{
+    physics::colliders::{Collides, Rect3d},
+    terrain::rendering::CHUNK_SIZE,
+};
 
 use self::array3d::Array3d;
 
@@ -75,7 +81,12 @@ impl Atoms {
         )
     }
 
-    pub fn contains_pos(&self, pos: UVec3) -> bool {
+    pub fn contains_point(&self, point: Vec3) -> bool {
+        let point = point - Vec3::splat(-0.5);
+        point.cmpgt(Vec3::ZERO).all() && point.cmplt(self.size().as_vec3()).all()
+    }
+
+    pub fn contains_atom(&self, pos: UVec3) -> bool {
         pos.x < self.size().x && pos.y < self.size().y && pos.z < self.size().z
     }
 
@@ -91,6 +102,126 @@ impl Atoms {
     }
 
     pub fn raycast(
+        &self,
+        ray: Ray,
+        max_dist: f32,
+        mut hit: impl FnMut(&Atom) -> bool,
+        gizmos: &mut Gizmos,
+    ) -> Option<RaycastHit> {
+        let original_ray = ray;
+        let (dist, ray) = if self.contains_point(ray.origin) {
+            let grid_pos = super::world_to_grid_pos(ray.origin);
+            if hit(&self[grid_pos]) {
+                return Some(RaycastHit {
+                    grid_pos,
+                    side: !Direction::from_vec3(ray.direction),
+                    dist: 0.0,
+                    is_wall: false,
+                });
+            }
+            (0.0, ray)
+        } else {
+            let (dist, side) = self.raycast_walls(ray, max_dist, gizmos)?;
+            let grid_pos = super::world_to_grid_pos(ray.get_point(dist));
+            if hit(&self[grid_pos]) {
+                return Some(RaycastHit {
+                    grid_pos,
+                    side,
+                    dist,
+                    is_wall: false,
+                });
+            }
+            (
+                dist,
+                Ray {
+                    origin: ray.get_point(dist),
+                    ..ray
+                },
+            )
+        };
+
+        self.raycast_terrain(ray, max_dist - dist, hit, gizmos)
+            .map(|hit| {
+                gizmos.cuboid(
+                    Transform::from_translation(original_ray.get_point(dist + hit.dist))
+                        .with_scale(Vec3::splat(0.1)),
+                    Color::RED,
+                );
+                RaycastHit {
+                    dist: dist + hit.dist,
+                    ..hit
+                }
+            })
+    }
+
+    fn raycast_walls(
+        &self,
+        ray: Ray,
+        max_dist: f32,
+        gizmos: &mut Gizmos,
+    ) -> Option<(f32, Direction)> {
+        let size = self.size().as_vec3();
+
+        macro_rules! process {
+            ($face:expr, $normal:expr, $side:ident) => {
+                let face = $face;
+                let normal = $normal;
+                face.gizmo(Color::GREEN, gizmos);
+                if ray.collides(&face) {
+                    let dist = ray.intersect_plane(face.origin, normal).unwrap();
+                    gizmos.cuboid(
+                        Transform::from_translation(ray.get_point(dist))
+                            .with_scale(Vec3::splat(0.1) - normal.abs() * 0.1),
+                        Color::DARK_GREEN,
+                    );
+                    return Some((dist + 1.0 / 16.0, Direction::$side))
+                        .filter(|&(dist, _)| dist <= max_dist);
+                }
+            };
+        }
+        fn flip(mut rect: Rect3d, movement: Vec3) -> Rect3d {
+            mem::swap(&mut rect.extents_a, &mut rect.extents_b);
+            rect.origin += movement;
+            rect
+        }
+
+        /* Ceiling */
+        let extents_a = Vec3::Z * size.z;
+        let extents_b = Vec3::X * size.x;
+        let ceiling = Rect3d {
+            origin: (extents_a + extents_b) * 0.5 - Vec3::splat(0.5) + Vec3::Y * size.y,
+            extents_a,
+            extents_b,
+        };
+
+        process!(ceiling, Vec3::Y, NegY);
+
+        /* x */
+        let extents_a = Vec3::Z * size.z;
+        let extents_b = Vec3::Y * size.y;
+        let wall_x = Rect3d {
+            origin: (extents_a + extents_b) * 0.5 - Vec3::splat(0.5),
+            extents_a,
+            extents_b,
+        };
+        process!(wall_x, Vec3::X, NegX);
+        process!(flip(wall_x, Vec3::X * size.x), -Vec3::X, PosX);
+
+        /* z */
+        let extents_a = Vec3::Y * size.y;
+        let extents_b = Vec3::X * size.x;
+        let wall_z = Rect3d {
+            origin: (extents_a + extents_b) * 0.5 - Vec3::splat(0.5),
+            extents_a,
+            extents_b,
+        };
+        process!(wall_z, Vec3::Z, NegZ);
+        process!(flip(wall_z, Vec3::Z * size.z), -Vec3::Z, PosZ);
+
+        None
+    }
+
+    fn raycast_terrain(
         &self,
         ray: Ray,
         max_dist: f32,
@@ -144,13 +275,12 @@ impl Atoms {
             ($v:ident, $pos:ident | $neg:ident) => {
                 atom.$v += step.$v;
                 let dist = t_max.min_element();
-                gizmos.ray(ray.origin, ray_dir.get_point(dist), Color::BLACK);
                 t_max.$v += t_delta.$v;
                 gizmos.cuboid(
                     Transform::from_translation(atom.as_vec3()),
                     Color::rgb(0.0, 191.0, 255.0),
                 );
-                if !self.contains_pos(atom.as_uvec3()) {
+                if !self.contains_atom(atom.as_uvec3()) {
                     return Some(RaycastHit {
                         grid_pos: atom,
                         side: if step.$v == 1 {

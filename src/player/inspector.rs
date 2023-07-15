@@ -16,7 +16,7 @@ pub struct InspectorPlugin;
 impl Plugin for InspectorPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
-            PostUpdate,
+            Update,
             (
                 player_inspector_system,
                 player_gizmo_system.run_if(|config: Res<PlayerConfig>| config.freecam_enabled),

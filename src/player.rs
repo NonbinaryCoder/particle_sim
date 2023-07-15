@@ -1,25 +1,18 @@
 //! Player controller.
 
-use std::{f32::consts::PI, mem};
+use std::f32::consts::PI;
 
 use bevy::prelude::*;
 
 use crate::{
-    terrain::{
-        storage::{Atoms, RaycastHit},
-        Direction,
-    },
+    terrain::storage::{Atoms, RaycastHit},
     ui::CursorGrabbed,
 };
 
-use self::{
-    bindings::{Binding, Bindings},
-    physics::{CollisionPoint, Rect3d},
-};
+use self::bindings::{Binding, Bindings};
 
 pub mod bindings;
 mod inspector;
-mod physics;
 mod rendering;
 
 pub struct PlayerPlugin;
@@ -187,89 +180,10 @@ fn player_look_pos_system(
         direction: transform.forward(),
     };
 
-    let world_size = world.size().as_vec3();
-    let extents_a = Vec3::X * world_size.x;
-    let extents_b = Vec3::Z * world_size.z;
-    let floor = Rect3d {
-        origin: (extents_a + extents_b) * 0.5 - Vec3::splat(0.5),
-        extents_a,
-        extents_b,
-    };
-
     look_pos.0 = world.raycast(
         ray,
         config.reach_dist,
         |atom| atom.is_visible(),
         &mut gizmos,
     );
-}
-
-fn wall_look_pos(
-    floor: Rect3d,
-    ray: Ray,
-    world_size: Vec3,
-    grid_size: UVec3,
-) -> Option<(Vec3, IVec3, Direction)> {
-    macro_rules! return_if_some {
-        ($e:expr, $xyz:ident = $val:expr, $d:expr) => {
-            match $e {
-                Some(v) => {
-                    return Some((
-                        v,
-                        {
-                            let mut pos = v.round().as_ivec3();
-                            pos.$xyz = $val;
-                            pos
-                        },
-                        $d,
-                    ))
-                }
-                None => (),
-            }
-        };
-    }
-
-    fn flip(mut rect: Rect3d, movement: Vec3) -> Rect3d {
-        mem::swap(&mut rect.extents_a, &mut rect.extents_b);
-        rect.origin += movement;
-        rect
-    }
-
-    return_if_some!(
-        flip(floor, Vec3::Y * world_size.y).collision_point(&ray),
-        y = grid_size.y as i32,
-        Direction::NegY
-    );
-
-    let extents_a = Vec3::Z * world_size.z;
-    let extents_b = Vec3::Y * world_size.y;
-    let wall_x = Rect3d {
-        origin: (extents_a + extents_b) * 0.5 - Vec3::splat(0.5),
-        extents_a,
-        extents_b,
-    };
-
-    return_if_some!(wall_x.collision_point(&ray), x = -1, Direction::PosX);
-    return_if_some!(
-        flip(wall_x, Vec3::X * world_size.x).collision_point(&ray),
-        x = grid_size.x as i32,
-        Direction::NegX
-    );
-
-    let extents_a = Vec3::Y * world_size.y;
-    let extents_b = Vec3::X * world_size.x;
-    let wall_z = Rect3d {
-        origin: (extents_a + extents_b) * 0.5 - Vec3::splat(0.5),
-        extents_a,
-        extents_b,
-    };
-
-    return_if_some!(wall_z.collision_point(&ray), z = -1, Direction::PosZ);
-    return_if_some!(
-        flip(wall_z, Vec3::Z * world_size.z).collision_point(&ray),
-        z = grid_size.z as i32,
-        Direction::NegZ
-    );
-
-    None
 }

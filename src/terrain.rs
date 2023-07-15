@@ -1,5 +1,7 @@
 //! Atom and floor rendering, and atom physics.
 
+use std::ops::Not;
+
 use bevy::prelude::*;
 
 use self::{color::AtomColor, storage::Atoms};
@@ -112,6 +114,43 @@ impl Direction {
             Direction::NegY => Vec3::X,
             Direction::PosZ => Vec3::X,
             Direction::NegZ => Vec3::Y,
+        }
+    }
+
+    pub fn from_vec3(v: Vec3) -> Direction {
+        let mag = v.abs();
+
+        macro_rules! process {
+            ($v:ident, $pos:ident | $neg:ident) => {
+                match v.$v >= 0.0 {
+                    true => Direction::$pos,
+                    false => Direction::$neg,
+                }
+            };
+        }
+
+        #[allow(clippy::collapsible_else_if)]
+        if mag.x > mag.y && mag.x > mag.z {
+            process!(x, PosX | NegX)
+        } else if mag.y > mag.x && mag.y > mag.z {
+            process!(y, PosY | NegY)
+        } else {
+            process!(z, PosZ | NegZ)
+        }
+    }
+}
+
+impl Not for Direction {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Direction::PosX => Direction::NegX,
+            Direction::NegX => Direction::PosX,
+            Direction::PosY => Direction::NegY,
+            Direction::NegY => Direction::PosY,
+            Direction::PosZ => Direction::NegZ,
+            Direction::NegZ => Direction::PosZ,
         }
     }
 }

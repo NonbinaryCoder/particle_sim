@@ -19,14 +19,16 @@ pub fn place_atom_system(
 ) {
     let look_pos = player_query.single();
     if let Some(pos) = &look_pos.0 {
+        if keys.just_pressed(KeyCode::Q) {
+            let pos = pos.grid_pos.as_uvec3();
+            if world.contains_atom(pos) {
+                world.set(pos, Atom::AIR);
+            }
+        }
+
         let place_pos = (pos.grid_pos + pos.side.normal_ivec()).as_uvec3();
-        if world.contains_pos(place_pos) {
-            if keys.just_pressed(KeyCode::Q) {
-                let pos = pos.grid_pos.as_uvec3();
-                if world.contains_pos(pos) {
-                    world.set(pos, Atom::AIR);
-                }
-            } else if keys.just_pressed(KeyCode::E) {
+        if world.contains_atom(place_pos) {
+            if keys.just_pressed(KeyCode::E) {
                 world.set(
                     place_pos,
                     Atom {

@@ -1,6 +1,7 @@
 use bevy::{prelude::*, window::CursorGrabMode, DefaultPlugins};
 use bevy_egui::EguiPlugin;
 
+mod physics;
 mod player;
 mod terrain;
 mod ui;

@@ -130,23 +130,25 @@ fn look_direction_system(
 struct Momentum(Vec3);
 
 fn player_move_system(
-    mut query: Query<(&mut Momentum, &Transform), With<ControlledEntity>>,
+    mut query: Query<(&mut Momentum, &LookDirection), With<ControlledEntity>>,
     config: Res<PlayerConfig>,
     bindings: Res<Bindings>,
     mut inputs: <bindings::Axis2 as Binding>::Inputs<'_, '_>,
 ) {
     // This system will need to be rewritten when a proper friction system is
     // added.
-    fn flatten(v: Vec3) -> Vec3 {
-        Vec3 { y: 0.0, ..v }
-    }
-
-    let (mut momentum, transform) = query.single_mut();
     let local_walk = bindings.walk.value_clamped(&mut inputs);
-    let global_walk = flatten(transform.forward()) * local_walk.y
-        + flatten(transform.left()) * local_walk.x
-        + Vec3::Y * bindings.up_down.value_clamped(inputs.as_mut());
-    momentum.0 += global_walk.normalize_or_zero() * config.speed;
+    let local_up_down = bindings.up_down.value_clamped(inputs.as_mut());
+    if local_walk.length_squared() >= 0.001 || local_up_down.abs() >= 0.001 {
+        let (mut momentum, look_dir) = query.single_mut();
+
+        let rotation = Quat::from_rotation_y(look_dir.horizontal);
+        let forward = rotation * -Vec3::Z;
+        let left = rotation * -Vec3::X;
+
+        let global_walk = forward * local_walk.y + left * local_walk.x + Vec3::Y * local_up_down;
+        momentum.0 += global_walk.normalize_or_zero() * config.speed;
+    }
 }
 
 fn apply_momentum_system(mut query: Query<(&Momentum, &mut Transform)>) {

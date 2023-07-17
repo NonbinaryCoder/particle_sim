@@ -328,6 +328,7 @@ impl<'a> Iterator for Chunks<'a> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Chunk<'a> {
     pos: UVec3,
     offset: UVec3,

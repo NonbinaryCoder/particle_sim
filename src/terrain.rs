@@ -1,6 +1,9 @@
 //! Atom and floor rendering, and atom physics.
 
-use std::{f32::consts::PI, ops::Not};
+use std::{
+    f32::consts::PI,
+    ops::{Index, IndexMut, Not},
+};
 
 use bevy::prelude::*;
 
@@ -40,8 +43,16 @@ impl Atom {
         color: AtomColor::INVISIBLE,
     };
 
-    pub fn is_visible(&self) -> bool {
+    pub const fn is_visible(&self) -> bool {
         self.color.a > 0
+    }
+
+    pub const fn is_opaque(&self) -> bool {
+        self.color.a == u8::MAX
+    }
+
+    pub const fn is_transparent(&self) -> bool {
+        self.color.a < u8::MAX && self.color.a > 0
     }
 }
 
@@ -168,4 +179,40 @@ impl Not for Direction {
 
 fn world_to_grid_pos(pos: Vec3) -> IVec3 {
     pos.round().as_ivec3()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Opacity {
+    Opaque,
+    Transparent,
+}
+
+impl Opacity {
+    pub const VARIANTS: [Self; 2] = [Opacity::Opaque, Opacity::Transparent];
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ByOpacity<T> {
+    pub opaque: T,
+    pub transparent: T,
+}
+
+impl<T> Index<Opacity> for ByOpacity<T> {
+    type Output = T;
+
+    fn index(&self, index: Opacity) -> &Self::Output {
+        match index {
+            Opacity::Opaque => &self.opaque,
+            Opacity::Transparent => &self.transparent,
+        }
+    }
+}
+
+impl<T> IndexMut<Opacity> for ByOpacity<T> {
+    fn index_mut(&mut self, index: Opacity) -> &mut Self::Output {
+        match index {
+            Opacity::Opaque => &mut self.opaque,
+            Opacity::Transparent => &mut self.transparent,
+        }
+    }
 }

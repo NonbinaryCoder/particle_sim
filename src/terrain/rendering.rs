@@ -10,7 +10,7 @@ use bevy::{
     },
 };
 
-use super::{storage::DEFAULT_SIZE, Atom};
+use super::{storage::DEFAULT_SIZE, Atom, ByOpacity};
 
 pub mod mesh_gen;
 
@@ -27,14 +27,8 @@ impl Plugin for RenderingPlugin {
     }
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct MaterialTypes<T> {
-    pub opaque: T,
-    pub transparent: T,
-}
-
 /// Materials used by atoms and the floor.
-pub type TerrainMaterials = MaterialTypes<Handle<TerrainMaterial>>;
+pub type TerrainMaterials = ByOpacity<Handle<TerrainMaterial>>;
 
 impl Resource for TerrainMaterials {}
 
@@ -115,14 +109,28 @@ pub const CHUNK_SIZE: usize = 16;
 #[derive(Debug, Default, Clone)]
 pub struct ChunkData {
     is_changed: bool,
-    visible_atom_count: u16,
+    by_opacity: ByOpacity<ChunkDataByOpacity>,
+}
+
+/// Data associated with each render chunk that is duplicated for each opacity
+/// class.
+#[derive(Debug, Default, Clone)]
+pub struct ChunkDataByOpacity {
+    atoms: u16,
     mesh: Option<(Entity, Handle<Mesh>)>,
 }
 
 impl ChunkData {
     pub fn atom_changed(&mut self, old: &Atom, new: &Atom) {
         self.is_changed = true;
-        Self::update_count(&mut self.visible_atom_count, Atom::is_visible, old, new);
+        macro_rules! update_count {
+            ($( $count:ident ).+, $fn:expr) => {
+                Self::update_count(&mut self.$( $count ).+, $fn, old, new);
+            };
+        }
+
+        update_count!(by_opacity.opaque.atoms, Atom::is_opaque);
+        update_count!(by_opacity.transparent.atoms, Atom::is_transparent);
     }
 
     fn update_count(count: &mut u16, mut f: impl FnMut(&Atom) -> bool, old: &Atom, new: &Atom) {

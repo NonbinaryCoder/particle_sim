@@ -6,12 +6,12 @@ use bevy::{
 };
 
 use crate::terrain::{
-    color::AtomColor,
+    color::{AtomColor, UncompressedColor},
     storage::{Atoms, Chunk},
-    Direction,
+    Direction, Opacity,
 };
 
-use super::{ChunkData, TerrainMaterials};
+use super::{ChunkData, ChunkDataByOpacity, TerrainMaterials};
 
 mod inspector;
 
@@ -34,7 +34,7 @@ fn generate_chunk_meshes_system(
     for (pos, chunk, chunk_data) in world.chunks() {
         if chunk_data.is_changed {
             chunk_data.is_changed = false;
-            modify_chunk_mesh(
+            modify_chunk_meshes(
                 &mut commands,
                 &mut aabb_query,
                 &mut meshes,
@@ -47,7 +47,7 @@ fn generate_chunk_meshes_system(
     }
 }
 
-fn modify_chunk_mesh(
+fn modify_chunk_meshes(
     commands: &mut Commands,
     aabb_query: &mut Query<&mut Aabb>,
     meshes: &mut Assets<Mesh>,
@@ -56,12 +56,41 @@ fn modify_chunk_mesh(
     data: &mut ChunkData,
     pos: UVec3,
 ) {
-    if data.visible_atom_count > 0 {
-        let (entity, mesh) = get_entity_and_mesh(commands, meshes, materials, data, pos);
+    for typ in Opacity::VARIANTS {
+        modify_chunk_mesh(
+            commands,
+            aabb_query,
+            meshes,
+            materials,
+            chunk.clone(),
+            data,
+            pos,
+            typ,
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn modify_chunk_mesh(
+    commands: &mut Commands,
+    aabb_query: &mut Query<&mut Aabb>,
+    meshes: &mut Assets<Mesh>,
+    materials: &TerrainMaterials,
+    chunk: Chunk,
+    data: &mut ChunkData,
+    pos: UVec3,
+    opacity: Opacity,
+) {
+    let data = &mut data.by_opacity[opacity];
+    if data.atoms > 0 {
+        let (entity, mesh) = get_entity_and_mesh(commands, meshes, materials, data, pos, opacity);
         let mut builder = MeshBuilder::extract(mesh);
         builder.clear();
 
-        generate_chunk_mesh(chunk, pos, data, builder);
+        match opacity {
+            Opacity::Opaque => generate_chunk_mesh_opaque(chunk, pos, data, builder),
+            Opacity::Transparent => generate_chunk_mesh_transparent(chunk, pos, data, builder),
+        }
 
         let aabb = mesh.compute_aabb().unwrap_or_default();
         if let Ok(mut mesh_aabb) = aabb_query.get_mut(entity) {
@@ -80,27 +109,58 @@ fn get_entity_and_mesh<'m>(
     commands: &mut Commands,
     meshes: &'m mut Assets<Mesh>,
     materials: &TerrainMaterials,
-    data: &mut ChunkData,
+    data: &mut ChunkDataByOpacity,
     pos: UVec3,
+    opacity: Opacity,
 ) -> (Entity, &'m mut Mesh) {
     let (entity, mesh) = data
         .mesh
-        .get_or_insert_with(|| init_chunk_mesh(commands, meshes, materials, pos));
+        .get_or_insert_with(|| init_chunk_mesh(commands, meshes, materials, pos, opacity));
     (*entity, meshes.get_mut(mesh).unwrap())
 }
 
-fn generate_chunk_mesh(chunk: Chunk, pos: UVec3, data: &mut ChunkData, mut mesh: MeshBuilder) {
+fn generate_chunk_mesh_opaque(
+    chunk: Chunk,
+    pos: UVec3,
+    data: &ChunkDataByOpacity,
+    mut mesh: MeshBuilder,
+) {
     let mut atoms_rendered = 0;
     for atom in chunk {
-        if atom.is_visible() {
+        if atom.is_opaque() {
+            let color = atom.color.decompress();
             atoms_rendered += 1;
-            mesh.add_face(atom.pos() - pos, atom.color, Direction::PosY);
-            mesh.add_face(atom.pos() - pos, atom.color, Direction::NegY);
-            mesh.add_face(atom.pos() - pos, atom.color, Direction::PosX);
-            mesh.add_face(atom.pos() - pos, atom.color, Direction::NegX);
-            mesh.add_face(atom.pos() - pos, atom.color, Direction::PosZ);
-            mesh.add_face(atom.pos() - pos, atom.color, Direction::NegZ);
-            if atoms_rendered == data.visible_atom_count {
+            mesh.add_face(atom.pos() - pos, color, Direction::PosY);
+            mesh.add_face(atom.pos() - pos, color, Direction::NegY);
+            mesh.add_face(atom.pos() - pos, color, Direction::PosX);
+            mesh.add_face(atom.pos() - pos, color, Direction::NegX);
+            mesh.add_face(atom.pos() - pos, color, Direction::PosZ);
+            mesh.add_face(atom.pos() - pos, color, Direction::NegZ);
+            if atoms_rendered == data.atoms {
+                break;
+            }
+        }
+    }
+}
+
+fn generate_chunk_mesh_transparent(
+    chunk: Chunk,
+    pos: UVec3,
+    data: &ChunkDataByOpacity,
+    mut mesh: MeshBuilder,
+) {
+    let mut atoms_rendered = 0;
+    for atom in chunk {
+        if atom.is_transparent() {
+            let color = atom.color.decompress();
+            atoms_rendered += 1;
+            mesh.add_face(atom.pos() - pos, color, Direction::PosY);
+            mesh.add_face(atom.pos() - pos, color, Direction::NegY);
+            mesh.add_face(atom.pos() - pos, color, Direction::PosX);
+            mesh.add_face(atom.pos() - pos, color, Direction::NegX);
+            mesh.add_face(atom.pos() - pos, color, Direction::PosZ);
+            mesh.add_face(atom.pos() - pos, color, Direction::NegZ);
+            if atoms_rendered == data.atoms {
                 break;
             }
         }
@@ -117,6 +177,7 @@ fn init_chunk_mesh(
     meshes: &mut Assets<Mesh>,
     materials: &TerrainMaterials,
     pos: UVec3,
+    opacity: Opacity,
 ) -> (Entity, Handle<Mesh>) {
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, Vec::<[f32; 3]>::new());
@@ -127,7 +188,7 @@ fn init_chunk_mesh(
         .spawn((
             MaterialMeshBundle {
                 mesh: mesh.clone(),
-                material: materials.opaque.clone(),
+                material: materials[opacity].clone(),
                 transform: Transform::from_translation(pos.as_vec3()),
                 ..default()
             },
@@ -185,7 +246,7 @@ impl<'a> MeshBuilder<'a> {
         self.color.reserve(num_vertices);
     }
 
-    fn add_face(&mut self, pos: UVec3, color: AtomColor, direction: Direction) {
+    fn add_face(&mut self, pos: UVec3, color: UncompressedColor, direction: Direction) {
         let pos = pos.as_vec3();
 
         let normal = direction.normal();
@@ -226,7 +287,7 @@ pub fn cube() -> Mesh {
 
     builder.reserve(6);
     for direction in Direction::DIRECTIONS {
-        builder.add_face(UVec3::ZERO, AtomColor::WHITE, direction);
+        builder.add_face(UVec3::ZERO, AtomColor::WHITE.decompress(), direction);
     }
 
     let mut mesh = Mesh::new(PrimitiveTopology::TriangleList);

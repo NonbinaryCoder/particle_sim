@@ -49,6 +49,13 @@ pub fn place_atom_system(
                         color: AtomColor::from_u32(0x00ff00ff),
                     },
                 );
+            } else if keys.just_pressed(KeyCode::R) {
+                world.set(
+                    place_pos,
+                    Atom {
+                        color: AtomColor::from_u32(0x0000ff99),
+                    },
+                )
             }
         }
     }

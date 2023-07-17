@@ -19,7 +19,18 @@ impl AtomColor {
         Self { r, g, b, a }
     }
 
+    pub fn decompress(self) -> UncompressedColor {
+        let [r, g, b, a] = (Color::rgba_u8(self.r, self.g, self.b, self.a)).as_rgba_f32();
+        UncompressedColor([r * a, g * a, b * a, a])
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct UncompressedColor([f32; 4]);
+
+impl UncompressedColor {
     pub fn to_mesh_color(self, shading: f32) -> [f32; 4] {
-        (Color::rgba_u8(self.r, self.g, self.b, self.a) * shading).as_rgba_f32()
+        let [r, g, b, a] = self.0;
+        [r * shading, g * shading, b * shading, a]
     }
 }

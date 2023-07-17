@@ -12,7 +12,7 @@ use bevy::{
 
 use super::{storage::DEFAULT_SIZE, Atom};
 
-mod mesh_gen;
+pub mod mesh_gen;
 
 pub struct RenderingPlugin;
 
@@ -34,13 +34,13 @@ pub struct MaterialTypes<T> {
 }
 
 /// Materials used by atoms and the floor.
-type TerrainMaterials = MaterialTypes<Handle<TerrainMaterial>>;
+pub type TerrainMaterials = MaterialTypes<Handle<TerrainMaterial>>;
 
 impl Resource for TerrainMaterials {}
 
 #[derive(Debug, AsBindGroup, TypeUuid, Clone, TypePath)]
 #[uuid = "46c0094b-ce2b-4c35-ac23-49388d7428ab"]
-struct TerrainMaterial {
+pub struct TerrainMaterial {
     transparent: bool,
 }
 

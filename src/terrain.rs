@@ -1,6 +1,6 @@
 //! Atom and floor rendering, and atom physics.
 
-use std::ops::Not;
+use std::{f32::consts::PI, ops::Not};
 
 use bevy::prelude::*;
 
@@ -8,7 +8,7 @@ use self::{color::AtomColor, storage::Atoms};
 
 mod color;
 mod editing;
-mod rendering;
+pub mod rendering;
 pub mod storage;
 
 pub struct TerrainPlugin;
@@ -114,6 +114,17 @@ impl Direction {
             Direction::NegY => Vec3::X,
             Direction::PosZ => Vec3::X,
             Direction::NegZ => Vec3::Y,
+        }
+    }
+
+    pub fn rotation(self) -> Quat {
+        match self {
+            Direction::PosX => Quat::from_rotation_y(PI * 0.5),
+            Direction::NegX => Quat::from_rotation_y(PI * 0.5),
+            Direction::PosY => Quat::from_rotation_x(PI * 0.5),
+            Direction::NegY => Quat::from_rotation_x(PI * 0.5),
+            Direction::PosZ => Quat::IDENTITY,
+            Direction::NegZ => Quat::IDENTITY,
         }
     }
 

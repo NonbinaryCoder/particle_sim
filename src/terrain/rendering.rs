@@ -27,15 +27,22 @@ impl Plugin for RenderingPlugin {
     }
 }
 
-/// Materials used by atoms and the floor.
-#[derive(Debug, Resource, TypePath)]
-struct TerrainMaterials {
-    opaque: Handle<TerrainMaterial>,
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct MaterialTypes<T> {
+    pub opaque: T,
+    pub transparent: T,
 }
+
+/// Materials used by atoms and the floor.
+type TerrainMaterials = MaterialTypes<Handle<TerrainMaterial>>;
+
+impl Resource for TerrainMaterials {}
 
 #[derive(Debug, AsBindGroup, TypeUuid, Clone, TypePath)]
 #[uuid = "46c0094b-ce2b-4c35-ac23-49388d7428ab"]
-struct TerrainMaterial {}
+struct TerrainMaterial {
+    transparent: bool,
+}
 
 impl Material for TerrainMaterial {
     fn vertex_shader() -> ShaderRef {
@@ -59,6 +66,13 @@ impl Material for TerrainMaterial {
         descriptor.vertex.buffers = vec![vertex_layout];
         Ok(())
     }
+
+    fn alpha_mode(&self) -> AlphaMode {
+        match self.transparent {
+            true => AlphaMode::Premultiplied,
+            false => AlphaMode::Opaque,
+        }
+    }
 }
 
 /// Startup system that creates the materials used for atoms and the floor.
@@ -67,7 +81,8 @@ fn create_terrain_materials_system(
     mut materials: ResMut<Assets<TerrainMaterial>>,
 ) {
     commands.insert_resource(TerrainMaterials {
-        opaque: materials.add(TerrainMaterial {}),
+        opaque: materials.add(TerrainMaterial { transparent: false }),
+        transparent: materials.add(TerrainMaterial { transparent: true }),
     })
 }
 

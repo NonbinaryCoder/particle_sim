@@ -26,6 +26,7 @@ impl Plugin for TerrainPlugin {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Atom {
     pub color: AtomColor,
+    pub join_face: JoinFace,
 }
 
 impl Default for Atom {
@@ -37,10 +38,12 @@ impl Default for Atom {
 impl Atom {
     pub const VOID: Self = Self {
         color: AtomColor::INVISIBLE,
+        join_face: JoinFace::DEFAULT,
     };
 
     pub const AIR: Self = Self {
         color: AtomColor::INVISIBLE,
+        join_face: JoinFace::DEFAULT,
     };
 
     pub const fn is_visible(&self) -> bool {
@@ -54,6 +57,16 @@ impl Atom {
     pub const fn is_transparent(&self) -> bool {
         self.color.a < u8::MAX && self.color.a > 0
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JoinFace {
+    Never,
+    SameAlpha,
+}
+
+impl JoinFace {
+    pub const DEFAULT: Self = Self::SameAlpha;
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

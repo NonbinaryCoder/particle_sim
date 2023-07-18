@@ -10,7 +10,7 @@ use crate::{
     terrain::rendering::CHUNK_SIZE,
 };
 
-use self::array3d::Array3d;
+use self::array3d::{Array3d, GridPos};
 
 use super::{rendering::ChunkData, Atom, Direction};
 
@@ -44,20 +44,12 @@ impl Default for Atoms {
     }
 }
 
-impl Index<UVec3> for Atoms {
+impl<T: GridPos> Index<T> for Atoms {
     type Output = Atom;
 
-    fn index(&self, index: UVec3) -> &Self::Output {
-        self.atoms.get(index).unwrap_or(&Atom::VOID)
-    }
-}
-
-impl Index<IVec3> for Atoms {
-    type Output = Atom;
-
-    fn index(&self, index: IVec3) -> &Self::Output {
+    fn index(&self, index: T) -> &Self::Output {
         // Negative fields will still be outside of range after bitcast.
-        &self[index.as_uvec3()]
+        &self.atoms[index.to_uvec3()]
     }
 }
 
@@ -374,6 +366,11 @@ impl<'a> Deref for AtomRef<'a> {
 impl<'a> AtomRef<'a> {
     pub fn pos(&self) -> UVec3 {
         self.pos
+    }
+
+    pub fn in_direction(&self, direction: Direction) -> &Atom {
+        self.atoms
+            .get_or(self.pos.as_ivec3() + direction.normal_ivec(), &Atom::VOID)
     }
 }
 

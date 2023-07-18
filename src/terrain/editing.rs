@@ -2,7 +2,7 @@ use bevy::prelude::*;
 
 use crate::player::{LookPos, Player, PlayerUpdateSet};
 
-use super::{color::AtomColor, storage::Atoms, Atom};
+use super::{color::AtomColor, storage::Atoms, Atom, JoinFace};
 
 pub struct EditingPlugin;
 
@@ -33,6 +33,7 @@ pub fn place_atom_system(
                     place_pos,
                     Atom {
                         color: AtomColor::WHITE,
+                        join_face: JoinFace::DEFAULT,
                     },
                 );
             } else if keys.just_pressed(KeyCode::Z) {
@@ -40,6 +41,7 @@ pub fn place_atom_system(
                     place_pos,
                     Atom {
                         color: AtomColor::from_u32(0xff0000ff),
+                        join_face: JoinFace::DEFAULT,
                     },
                 );
             } else if keys.just_pressed(KeyCode::X) {
@@ -47,6 +49,7 @@ pub fn place_atom_system(
                     place_pos,
                     Atom {
                         color: AtomColor::from_u32(0x00ff00ff),
+                        join_face: JoinFace::DEFAULT,
                     },
                 );
             } else if keys.just_pressed(KeyCode::R) {
@@ -54,6 +57,15 @@ pub fn place_atom_system(
                     place_pos,
                     Atom {
                         color: AtomColor::from_u32(0x0000ff99),
+                        join_face: JoinFace::Never,
+                    },
+                )
+            } else if keys.just_pressed(KeyCode::F) {
+                world.set(
+                    place_pos,
+                    Atom {
+                        color: AtomColor::from_u32(0x00ffff99),
+                        join_face: JoinFace::SameAlpha,
                     },
                 )
             }

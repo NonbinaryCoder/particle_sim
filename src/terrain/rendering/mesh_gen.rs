@@ -7,8 +7,8 @@ use bevy::{
 
 use crate::terrain::{
     color::{AtomColor, UncompressedColor},
-    storage::{Atoms, Chunk},
-    Direction, Opacity,
+    storage::{AtomRef, Atoms, Chunk},
+    Direction, JoinFace, Opacity,
 };
 
 use super::{ChunkData, ChunkDataByOpacity, TerrainMaterials};
@@ -128,14 +128,8 @@ fn generate_chunk_mesh_opaque(
     let mut atoms_rendered = 0;
     for atom in chunk {
         if atom.is_opaque() {
-            let color = atom.color.decompress();
+            generate_atom_mesh_join_same_alpha(atom, pos, &mut mesh);
             atoms_rendered += 1;
-            mesh.add_face(atom.pos() - pos, color, Direction::PosY);
-            mesh.add_face(atom.pos() - pos, color, Direction::NegY);
-            mesh.add_face(atom.pos() - pos, color, Direction::PosX);
-            mesh.add_face(atom.pos() - pos, color, Direction::NegX);
-            mesh.add_face(atom.pos() - pos, color, Direction::PosZ);
-            mesh.add_face(atom.pos() - pos, color, Direction::NegZ);
             if atoms_rendered == data.atoms {
                 break;
             }
@@ -152,17 +146,30 @@ fn generate_chunk_mesh_transparent(
     let mut atoms_rendered = 0;
     for atom in chunk {
         if atom.is_transparent() {
-            let color = atom.color.decompress();
             atoms_rendered += 1;
-            mesh.add_face(atom.pos() - pos, color, Direction::PosY);
-            mesh.add_face(atom.pos() - pos, color, Direction::NegY);
-            mesh.add_face(atom.pos() - pos, color, Direction::PosX);
-            mesh.add_face(atom.pos() - pos, color, Direction::NegX);
-            mesh.add_face(atom.pos() - pos, color, Direction::PosZ);
-            mesh.add_face(atom.pos() - pos, color, Direction::NegZ);
+            match atom.join_face {
+                JoinFace::Never => generate_atom_mesh_never_join(atom, pos, &mut mesh),
+                JoinFace::SameAlpha => generate_atom_mesh_join_same_alpha(atom, pos, &mut mesh),
+            }
             if atoms_rendered == data.atoms {
                 break;
             }
+        }
+    }
+}
+
+fn generate_atom_mesh_never_join(atom: AtomRef, pos: UVec3, mesh: &mut MeshBuilder) {
+    let color = atom.color.decompress();
+    for direction in Direction::DIRECTIONS {
+        mesh.add_face(atom.pos() - pos, color, direction);
+    }
+}
+
+fn generate_atom_mesh_join_same_alpha(atom: AtomRef, pos: UVec3, mesh: &mut MeshBuilder) {
+    let color = atom.color.decompress();
+    for direction in Direction::DIRECTIONS {
+        if atom.in_direction(direction).color.a != atom.color.a {
+            mesh.add_face(atom.pos() - pos, color, direction);
         }
     }
 }
@@ -200,6 +207,7 @@ fn init_chunk_mesh(
     (entity, mesh)
 }
 
+#[derive(Debug)]
 struct MeshBuilder<'a> {
     position: &'a mut Vec<[f32; 3]>,
     color: &'a mut Vec<[f32; 4]>,

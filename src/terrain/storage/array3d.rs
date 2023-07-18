@@ -21,17 +21,6 @@ impl<T> Array3d<T, SimpleCurve> {
     {
         Array3d::new_with_curve(size, SimpleCurve)
     }
-
-    pub const fn size(&self) -> UVec3 {
-        self.size
-    }
-
-    /// Returns a mutable reference to the element at the index, or `None` if
-    /// the index is not within the bounds of this.
-    pub fn get(&self, index: UVec3) -> Option<&T> {
-        (index.x < self.size.x && index.y < self.size.y && index.z < self.size.z)
-            .then(|| &self[index])
-    }
 }
 
 impl<T, C: SpaceFillingCurve> Array3d<T, C> {
@@ -46,6 +35,21 @@ impl<T, C: SpaceFillingCurve> Array3d<T, C> {
         let data = data.into_boxed_slice();
 
         Self { data, size, curve }
+    }
+
+    pub const fn size(&self) -> UVec3 {
+        self.size
+    }
+
+    /// Returns a mutable reference to the element at the index, or `None` if
+    /// the index is not within the bounds of this.
+    pub fn get(&self, index: UVec3) -> Option<&T> {
+        (index.x < self.size.x && index.y < self.size.y && index.z < self.size.z)
+            .then(|| &self[index])
+    }
+
+    pub fn get_or<'a>(&'a self, index: impl GridPos, default: &'a T) -> &'a T {
+        self.get(index.to_uvec3()).unwrap_or(default)
     }
 }
 
@@ -138,6 +142,22 @@ impl<'a, T> Iterator for SimpleCurveIterMut<'a, T> {
 
             (item, self.index)
         })
+    }
+}
+
+pub trait GridPos {
+    fn to_uvec3(self) -> UVec3;
+}
+
+impl GridPos for UVec3 {
+    fn to_uvec3(self) -> UVec3 {
+        self
+    }
+}
+
+impl GridPos for IVec3 {
+    fn to_uvec3(self) -> UVec3 {
+        self.as_uvec3()
     }
 }
 

@@ -121,6 +121,10 @@ pub struct ChunkDataByOpacity {
 }
 
 impl ChunkData {
+    pub fn mark_changed(&mut self) {
+        self.is_changed = true;
+    }
+
     pub fn atom_changed(&mut self, old: &Atom, new: &Atom) {
         self.is_changed = true;
         macro_rules! update_count {

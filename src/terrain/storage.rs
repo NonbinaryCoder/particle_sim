@@ -56,21 +56,38 @@ impl<T: GridPos> Index<T> for Atoms {
 impl Atoms {
     /// Sets the atom at the specified position.
     pub fn set(&mut self, pos: UVec3, atom: Atom) {
-        let (old_atom, chunk) = self.atom_mut(pos);
+        let (old_atom, chunk, chunk_pos) = self.atom_mut(pos);
         if *old_atom != atom {
             chunk.atom_changed(old_atom, &atom);
             *old_atom = atom;
         }
+
+        let pos = pos % CHUNK_SIZE as u32;
+        macro_rules! update_adjacent {
+            ($f:ident, $dir:ident) => {
+                if pos.$f == 0 {
+                    if chunk_pos.$f > 0 {
+                        self.chunks[chunk_pos - UVec3::$dir].mark_changed();
+                    }
+                } else if pos.$f == CHUNK_SIZE as u32 - 1
+                    && (chunk_pos.$f + 1) * 16 < self.size().$f
+                {
+                    self.chunks[chunk_pos + UVec3::$dir].mark_changed();
+                }
+            };
+        }
+
+        update_adjacent!(x, X);
+        update_adjacent!(y, Y);
+        update_adjacent!(z, Z);
     }
 
     /// Returns a mutable reference to an atom and the data for the chunk it is
     /// in.  Note that changing an atom without updating chunk data may result
     /// in incorrect behavior.
-    fn atom_mut(&mut self, pos: UVec3) -> (&mut Atom, &mut ChunkData) {
-        (
-            &mut self.atoms[pos],
-            &mut self.chunks[pos / CHUNK_SIZE as u32],
-        )
+    fn atom_mut(&mut self, pos: UVec3) -> (&mut Atom, &mut ChunkData, UVec3) {
+        let chunk_pos = pos / CHUNK_SIZE as u32;
+        (&mut self.atoms[pos], &mut self.chunks[chunk_pos], chunk_pos)
     }
 
     pub fn contains_point(&self, point: Vec3) -> bool {
@@ -385,6 +402,8 @@ pub struct RaycastHit {
 
 #[cfg(test)]
 mod tests {
+    use crate::terrain::{color::AtomColor, JoinFace};
+
     use super::*;
 
     #[test]
@@ -396,5 +415,23 @@ mod tests {
             count += 1;
         }
         assert_eq!(count, CHUNK_SIZE.pow(3));
+    }
+
+    #[test]
+    fn all_atoms_placeable() {
+        let mut world = Atoms::default();
+        for x in 0..world.size().x {
+            for y in 0..world.size().y {
+                for z in 0..world.size().z {
+                    world.set(
+                        UVec3 { x, y, z },
+                        Atom {
+                            color: AtomColor::from_u32(0xff0000ff),
+                            join_face: JoinFace::SameAlpha,
+                        },
+                    )
+                }
+            }
+        }
     }
 }

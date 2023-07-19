@@ -78,7 +78,8 @@ impl Atoms {
         point.cmpgt(Vec3::ZERO).all() && point.cmplt(self.size().as_vec3()).all()
     }
 
-    pub fn contains_atom(&self, pos: UVec3) -> bool {
+    pub fn contains_atom(&self, pos: impl GridPos) -> bool {
+        let pos = pos.to_uvec3();
         pos.x < self.size().x && pos.y < self.size().y && pos.z < self.size().z
     }
 

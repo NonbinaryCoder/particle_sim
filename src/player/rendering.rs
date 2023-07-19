@@ -28,7 +28,7 @@ fn update_look_pos_marker_system(
             Vec2::ONE,
             Color::BLACK,
         );
-        if world.contains_atom(look_pos.grid_pos.as_uvec3()) {
+        if world.contains_atom(look_pos.grid_pos) {
             gizmos.cuboid(
                 Transform::from_translation(grid_pos).with_scale(Vec3::splat(1.005)),
                 Color::rgba(0.0, 0.0, 0.0, 0.33),

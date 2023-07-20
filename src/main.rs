@@ -1,6 +1,7 @@
 use bevy::{prelude::*, window::CursorGrabMode, DefaultPlugins};
 use bevy_egui::EguiPlugin;
 
+mod atom_physics;
 mod physics;
 mod player;
 mod terrain;
@@ -11,8 +12,9 @@ fn main() {
         .add_plugins((
             DefaultPlugins,
             EguiPlugin,
-            terrain::TerrainPlugin,
+            atom_physics::AtomPhysicsPlugin,
             player::PlayerPlugin,
+            terrain::TerrainPlugin,
             ui::UiPlugin,
         ))
         .add_systems(Startup, setup_window_system)

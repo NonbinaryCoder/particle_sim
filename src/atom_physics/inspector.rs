@@ -28,7 +28,9 @@ pub fn set_inspector_system(
             );
             ui.separator();
             if ui.button("Reload").clicked() {
-                load_set.send(LoadSet { name: None });
+                load_set.send(LoadSet {
+                    name: avalible_sets.get(*selected_set).map(|s| s.name.clone()),
+                });
             }
         });
 }

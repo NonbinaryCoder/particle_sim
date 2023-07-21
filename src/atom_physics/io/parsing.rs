@@ -1,19 +1,31 @@
 use std::fmt::Display;
 
+use super::diagnostics::Diagnostics;
+
 mod tokenizer;
 
-pub fn parse(code: &[u8]) {
+pub fn parse_file(code: &[u8], file: FileId, diagnostics: &mut Diagnostics) -> Result<(), ()> {
     println!("[");
-    for token in tokenizer::tokenize(code) {
+    for (token, position) in tokenizer::tokenize(code, file) {
         println!("    {:?}", token);
+        diagnostics.warn(format!("{:?}", token)).position(position);
     }
     println!("]");
+    Ok(())
 }
+
+pub type FileId = u16;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Position {
-    pub file_id: u16,
     pub index: u32,
+    pub file: FileId,
+}
+
+impl Position {
+    pub fn top_of(file: FileId) -> Position {
+        Position { index: 0, file }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

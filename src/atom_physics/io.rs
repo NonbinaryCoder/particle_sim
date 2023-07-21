@@ -56,10 +56,9 @@ fn load_set_system(
     avalible_sets.0.sort();
 
     if let Some(set_name) = set_name {
-        if let Ok(code) = read_code(set_name, &avalible_sets, &mut diagnostics) {
-            parsing::parse(&code);
-        }
+        read_code(set_name, &avalible_sets, &mut diagnostics);
     }
+    diagnostics.print_to_console();
 }
 
 fn load_avalible_sets(avalible_sets: &mut Vec<SetHandle>) -> io::Result<()> {
@@ -82,17 +81,20 @@ fn load_avalible_sets(avalible_sets: &mut Vec<SetHandle>) -> io::Result<()> {
     Ok(())
 }
 
+#[must_use]
 fn read_code(
     set_name: &str,
     avalible_sets: &AvalibleSets,
     diagnostics: &mut Diagnostics,
-) -> Result<Vec<u8>, ()> {
+) -> Vec<()> {
     let Some(set) = avalible_sets.iter().find(|set| set.name == set_name) else {
             // Uses Bevy diagnostic because end users should never encounter
             // this error.
             error!("Request to load set {set_name}, which does not exist");
-            return Err(());
+            return Vec::new();
         };
+
+    let mut parsed_files = Vec::new();
 
     let entries = match fs::read_dir(&set.path) {
         Ok(entries) => entries,
@@ -100,10 +102,9 @@ fn read_code(
             diagnostics
                 .error("Unable to read set directiory")
                 .context(e);
-            return Err(());
+            return Vec::new();
         }
     };
-    let mut code = Vec::new();
     for entry in entries {
         match entry {
             Ok(entry) => {
@@ -111,30 +112,31 @@ fn read_code(
                 if entry.file_type().is_ok_and(|ty| ty.is_file())
                     && path.extension().and_then(|s| s.to_str()) == Some("splang")
                 {
+                    let file_name = entry.file_name().to_string_lossy().into_owned();
                     let mut file = match File::open(path) {
                         Ok(file) => file,
                         Err(e) => {
                             diagnostics
-                                .warn(format!(
-                                    "Unable to open file {}",
-                                    entry.file_name().to_string_lossy()
-                                ))
+                                .warn(format!("Unable to open file {file_name}; skipping"))
                                 .context(e);
                             continue;
                         }
                     };
 
-                    let code_len = code.len();
-                    match file.read_to_end(&mut code) {
-                        Ok(_) => {}
+                    let mut buf = Vec::new();
+                    buf.clear();
+                    match file.read_to_end(&mut buf) {
+                        Ok(_) => {
+                            let id = diagnostics.next_id();
+                            if let Ok(parsed_file) = parsing::parse_file(&buf, id, diagnostics) {
+                                parsed_files.push(parsed_file);
+                            }
+                            diagnostics.add_file(file_name, buf);
+                        }
                         Err(e) => {
                             diagnostics
-                                .warn(format!(
-                                    "Unable to read file {}",
-                                    entry.file_name().to_string_lossy()
-                                ))
+                                .warn(format!("Unable to read file {file_name}; skipping"))
                                 .context(e);
-                            code.truncate(code_len);
                             continue;
                         }
                     }
@@ -147,5 +149,5 @@ fn read_code(
         }
     }
 
-    Ok(code)
+    parsed_files
 }

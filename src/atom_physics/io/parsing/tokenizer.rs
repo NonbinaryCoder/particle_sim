@@ -1,17 +1,21 @@
 use std::fmt::Debug;
 
-use super::{Keyword, Modifier, Operator, PrettyPrint};
+use super::{FileId, Keyword, Modifier, Operator, Position, PrettyPrint};
 
 pub struct Tokenizer<'a> {
     code: &'a [u8],
+    position: Position,
 }
 
-pub fn tokenize(code: &[u8]) -> Tokenizer<'_> {
-    Tokenizer { code }
+pub fn tokenize(code: &[u8], file: FileId) -> Tokenizer<'_> {
+    Tokenizer {
+        code,
+        position: Position::top_of(file),
+    }
 }
 
 impl<'a> Iterator for Tokenizer<'a> {
-    type Item = Token<'a>;
+    type Item = (Token<'a>, Position);
 
     fn next(&mut self) -> Option<Self::Item> {
         let whitespace_len = self
@@ -20,12 +24,15 @@ impl<'a> Iterator for Tokenizer<'a> {
             .take_while(|&&ch| ch.is_ascii_whitespace() && ch != b'\n')
             .count();
         (_, self.code) = self.code.split_at(whitespace_len);
+        self.position.index += whitespace_len as u32;
+        let pos = self.position;
         if let [first, code @ ..] = self.code {
             macro_rules! char_token {
                 ($ret:expr) => {{
                     let ret = $ret;
                     self.code = code;
-                    Some(ret)
+                    self.position.index += 1;
+                    Some((ret, pos))
                 }};
             }
             match first {
@@ -48,11 +55,13 @@ impl<'a> Iterator for Tokenizer<'a> {
                         .count();
                     let literal;
                     (literal, self.code) = self.code.split_at(literal_len);
+                    self.position.index += literal.len() as u32;
 
-                    Some(match literal {
+                    let token = match literal {
                         b"element" => Token::Keyword(Keyword::Element),
                         _ => Token::Literal(literal),
-                    })
+                    };
+                    Some((token, pos))
                 }
             }
         } else {

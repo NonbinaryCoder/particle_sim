@@ -9,7 +9,7 @@ use bevy::prelude::*;
 
 use self::{color::AtomColor, storage::Atoms};
 
-mod color;
+pub mod color;
 mod editing;
 pub mod rendering;
 pub mod storage;

@@ -1,17 +1,16 @@
-use std::fmt::Display;
+use std::fmt;
+
+use self::ast::Ast;
 
 use super::diagnostics::Diagnostics;
 
+mod ast;
 mod tokenizer;
 
-pub fn parse_file(code: &[u8], file: FileId, diagnostics: &mut Diagnostics) -> Result<(), ()> {
-    println!("[");
-    for (token, position) in tokenizer::tokenize(code, file) {
-        println!("    {:?}", token);
-        diagnostics.warn(format!("{:?}", token)).position(position);
-    }
-    println!("]");
-    Ok(())
+#[must_use]
+pub fn parse_file<'a>(code: &'a [u8], file: FileId, diagnostics: &mut Diagnostics) -> Vec<Ast<'a>> {
+    let mut tokens = tokenizer::tokenize(code, file);
+    ast::parse_block(&mut tokens, None, diagnostics)
 }
 
 pub type FileId = u16;
@@ -70,13 +69,23 @@ impl Modifier {
     }
 }
 
+#[derive(Clone, Copy)]
 pub struct PrettyPrint<'a>(&'a [u8]);
 
-impl<'a> Display for PrettyPrint<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<'a> fmt::Display for PrettyPrint<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match std::str::from_utf8(self.0) {
             Ok(s) => write!(f, "{s}"),
             Err(_) => write!(f, "{:?}", self.0),
+        }
+    }
+}
+
+impl<'a> fmt::Debug for PrettyPrint<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match std::str::from_utf8(self.0) {
+            Ok(s) => write!(f, "{s:?}"),
+            Err(_) => f.debug_list().entries(self.0).finish(),
         }
     }
 }

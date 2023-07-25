@@ -1,8 +1,8 @@
-use std::{borrow::Cow, mem};
+use std::{borrow::Cow, fmt::Write, mem};
 
 use unicode_width::UnicodeWidthStr;
 
-use super::parsing::{FileId, Position};
+use super::parsing::Position;
 
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
@@ -30,7 +30,6 @@ pub enum Level {
 pub struct Diagnostics {
     diagnostics: Vec<Diagnostic>,
     errored: bool,
-    files: Vec<(String, Vec<u8>)>,
 }
 
 impl Diagnostics {
@@ -38,25 +37,12 @@ impl Diagnostics {
         Self {
             diagnostics: Vec::new(),
             errored: false,
-            files: Vec::new(),
         }
     }
 
     pub fn add(&mut self, diagnostic: Diagnostic) {
         self.errored |= diagnostic.level == Level::Warn;
         self.diagnostics.push(diagnostic);
-    }
-
-    /// The id the next file added to this will have.
-    pub fn next_id(&self) -> FileId {
-        self.files.len() as FileId
-    }
-
-    /// Adds a file to be tracked by this.
-    ///
-    /// Tracked files are used to add context to errors.
-    pub fn add_file(&mut self, name: String, file: Vec<u8>) {
-        self.files.push((name, file));
     }
 
     pub fn warn(&mut self, text: impl Into<Cow<'static, str>>) -> DiagnosticBuilder {
@@ -85,7 +71,12 @@ impl Diagnostics {
         self.errored
     }
 
-    pub fn print_to_console(&self) {
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool {
+        self.diagnostics.is_empty()
+    }
+
+    pub fn print_to_console(&self, files: &[(String, Vec<u8>)]) {
         for diagnostic in &self.diagnostics {
             let Diagnostic {
                 level,
@@ -99,7 +90,7 @@ impl Diagnostics {
             println!("{text}");
 
             if let Some(position) = position {
-                let (name, file) = &self.files[position.file as usize];
+                let (name, file) = &files[position.file as usize];
                 if let Ok(file) = std::str::from_utf8(file) {
                     let (line, col, line_text) = line_col(file, position.index);
                     println!("  --> {name}:{line}:{col}");
@@ -130,10 +121,14 @@ impl<'a> DiagnosticBuilder<'a> {
     }
 
     pub fn context(mut self, context: impl std::fmt::Display) -> Self {
-        self.diagnostic
-            .text
-            .to_mut()
-            .push_str(&format!(": {}", context));
+        // Writing to a string never fails.
+        let _ = write!(self.diagnostic.text.to_mut(), ": {}", context);
+        self
+    }
+
+    pub fn quoted_context(mut self, context: impl std::fmt::Display) -> Self {
+        // Writing to a string never fails.
+        let _ = write!(self.diagnostic.text.to_mut(), ": \"{}\"", context);
         self
     }
 

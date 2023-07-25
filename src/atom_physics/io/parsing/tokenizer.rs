@@ -1,4 +1,4 @@
-use std::fmt::Debug;
+use std::fmt;
 
 use super::{FileId, Keyword, Modifier, Operator, Position, PrettyPrint};
 
@@ -70,6 +70,27 @@ impl<'a> Iterator for Tokenizer<'a> {
     }
 }
 
+impl<'a> Tokenizer<'a> {
+    pub fn skip_whitespace(&mut self) -> TokenizerSkipWhitespace<'a, '_> {
+        TokenizerSkipWhitespace(self)
+    }
+}
+
+pub struct TokenizerSkipWhitespace<'a, 'b>(&'b mut Tokenizer<'a>);
+
+impl<'a, 'b> Iterator for TokenizerSkipWhitespace<'a, 'b> {
+    type Item = (Token<'a>, Position);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        loop {
+            match self.0.next() {
+                Some((Token::Newline, _)) => continue,
+                ret => break ret,
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Token<'a> {
     Newline,
@@ -80,8 +101,8 @@ pub enum Token<'a> {
     Literal(&'a [u8]),
 }
 
-impl<'a> Debug for Token<'a> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<'a> fmt::Debug for Token<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Token::Newline => write!(f, "Newline"),
             Token::Keyword(kw) => write!(f, "Keyword({})", kw.variant_name()),
@@ -91,6 +112,22 @@ impl<'a> Debug for Token<'a> {
                 write!(f, "Bracket {{ ty: {}, open: {} }}", ty.variant_name(), open)
             }
             Token::Literal(l) => write!(f, "Literal({})", PrettyPrint(l)),
+        }
+    }
+}
+
+impl<'a> fmt::Display for Token<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Token::Newline => write!(f, "newline"),
+            Token::Keyword(kw) => write!(f, "keyword \"{}\"", kw.variant_name()),
+            Token::Operator(o) => write!(f, "operator \"{}\"", o.variant_name()),
+            Token::Modifier(m) => write!(f, "modifier \"{}\"", m.variant_name()),
+            Token::Bracket { ty, open } => match (ty, open) {
+                (BracketTy::Curvy, true) => write!(f, "{{"),
+                (BracketTy::Curvy, false) => write!(f, "}}"),
+            },
+            Token::Literal(l) => write!(f, "\"{}\"", PrettyPrint(l)),
         }
     }
 }

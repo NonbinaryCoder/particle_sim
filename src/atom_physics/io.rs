@@ -56,9 +56,18 @@ fn load_set_system(
     avalible_sets.0.sort();
 
     if let Some(set_name) = set_name {
-        read_code(set_name, &avalible_sets, &mut diagnostics);
+        let files = read_files(set_name, &avalible_sets, &mut diagnostics);
+        if !diagnostics.has_errored() {
+            let mut ast = Vec::new();
+            for ((_, file), id) in files.iter().zip(0..) {
+                ast.push(parsing::parse_file(file, id, &mut diagnostics));
+            }
+            dbg!(ast);
+        }
+        diagnostics.print_to_console(&files);
+    } else {
+        diagnostics.print_to_console(&[]);
     }
-    diagnostics.print_to_console();
 }
 
 fn load_avalible_sets(avalible_sets: &mut Vec<SetHandle>) -> io::Result<()> {
@@ -82,11 +91,11 @@ fn load_avalible_sets(avalible_sets: &mut Vec<SetHandle>) -> io::Result<()> {
 }
 
 #[must_use]
-fn read_code(
+fn read_files(
     set_name: &str,
     avalible_sets: &AvalibleSets,
     diagnostics: &mut Diagnostics,
-) -> Vec<()> {
+) -> Vec<(String, Vec<u8>)> {
     let Some(set) = avalible_sets.iter().find(|set| set.name == set_name) else {
             // Uses Bevy diagnostic because end users should never encounter
             // this error.
@@ -94,7 +103,7 @@ fn read_code(
             return Vec::new();
         };
 
-    let mut parsed_files = Vec::new();
+    let mut files = Vec::new();
 
     let entries = match fs::read_dir(&set.path) {
         Ok(entries) => entries,
@@ -127,11 +136,7 @@ fn read_code(
                     buf.clear();
                     match file.read_to_end(&mut buf) {
                         Ok(_) => {
-                            let id = diagnostics.next_id();
-                            if let Ok(parsed_file) = parsing::parse_file(&buf, id, diagnostics) {
-                                parsed_files.push(parsed_file);
-                            }
-                            diagnostics.add_file(file_name, buf);
+                            files.push((file_name, buf));
                         }
                         Err(e) => {
                             diagnostics
@@ -149,5 +154,5 @@ fn read_code(
         }
     }
 
-    parsed_files
+    files
 }

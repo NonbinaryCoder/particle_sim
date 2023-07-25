@@ -60,11 +60,8 @@ pub fn parse_block<'a>(
                     .quoted_context(o.variant_name())
                     .position(pos);
             }
-            Token::Modifier(m) => {
-                diagnostics
-                    .error("Unexpected modifier")
-                    .quoted_context(m.variant_name())
-                    .position(pos);
+            Token::Modifier(Modifier::HexColor) => {
+                ast.push(Ast::Color(parse_hex_color(tokens, diagnostics)))
             }
             Token::Literal(l) => match tokens.next() {
                 None => {

@@ -8,6 +8,8 @@ use bevy::prelude::*;
 
 use self::diagnostics::Diagnostics;
 
+use super::{element::Element, id::MappedToId};
+
 mod diagnostics;
 mod parsing;
 
@@ -56,15 +58,14 @@ fn load_set_system(
     avalible_sets.0.sort();
 
     if let Some(set_name) = set_name {
-        let files = read_files(set_name, &avalible_sets, &mut diagnostics);
-        if !diagnostics.has_errored() {
-            let mut ast = Vec::new();
-            for ((_, file), id) in files.iter().zip(0..) {
-                ast.push(parsing::parse_file(file, id, &mut diagnostics));
-            }
-            dbg!(ast);
-        }
-        diagnostics.print_to_console(&files);
+        if let Some(set) = avalible_sets.iter().find(|set| &set.name == set_name) {
+            load_set(set, &mut diagnostics);
+        } else {
+            // Uses Bevy diagnostic because end users should never encounter
+            // this error.
+            error!("Request to load set {set_name}, which does not exist");
+            diagnostics.print_to_console(&[]);
+        };
     } else {
         diagnostics.print_to_console(&[]);
     }
@@ -90,19 +91,20 @@ fn load_avalible_sets(avalible_sets: &mut Vec<SetHandle>) -> io::Result<()> {
     Ok(())
 }
 
-#[must_use]
-fn read_files(
-    set_name: &str,
-    avalible_sets: &AvalibleSets,
-    diagnostics: &mut Diagnostics,
-) -> Vec<(String, Vec<u8>)> {
-    let Some(set) = avalible_sets.iter().find(|set| set.name == set_name) else {
-            // Uses Bevy diagnostic because end users should never encounter
-            // this error.
-            error!("Request to load set {set_name}, which does not exist");
-            return Vec::new();
-        };
+fn load_set(set: &SetHandle, diagnostics: &mut Diagnostics) {
+    let files = read_files(set, diagnostics);
+    if !diagnostics.has_errored() {
+        let mut elements = Element::create_map();
+        for ((_, file), id) in files.iter().zip(0..) {
+            parsing::parse_file(file, id, diagnostics, &mut elements);
+        }
+        dbg!(elements);
+    }
+    diagnostics.print_to_console(&files);
+}
 
+#[must_use]
+fn read_files(set: &SetHandle, diagnostics: &mut Diagnostics) -> Vec<(String, Vec<u8>)> {
     let mut files = Vec::new();
 
     let entries = match fs::read_dir(&set.path) {
@@ -133,7 +135,6 @@ fn read_files(
                     };
 
                     let mut buf = Vec::new();
-                    buf.clear();
                     match file.read_to_end(&mut buf) {
                         Ok(_) => {
                             files.push((file_name, buf));

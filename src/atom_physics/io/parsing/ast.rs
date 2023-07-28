@@ -1,6 +1,9 @@
 use core::fmt;
 
-use crate::{atom_physics::io::diagnostics::Diagnostics, terrain::color::AtomColor};
+use crate::{
+    atom_physics::{io::diagnostics::Diagnostics, value::ValueUntyped},
+    terrain::color::AtomColor,
+};
 
 use super::{
     tokenizer::{BracketTy, Token, Tokenizer},
@@ -41,6 +44,35 @@ impl<'a> fmt::Debug for Ast<'a> {
                 .field("variable", &PrettyPrint(variable))
                 .field("value", value)
                 .finish(),
+        }
+    }
+}
+
+impl<'a> Ast<'a> {
+    pub fn variant_name(&self) -> &'static str {
+        match self {
+            Ast::Literal(_) => "literal",
+            Ast::Block(_) => "block",
+            Ast::Color(_) => "color",
+            Ast::Element { .. } => "element",
+            Ast::VariableAssign { .. } => "variable assign",
+        }
+    }
+
+    pub fn const_eval(&self, diagnostics: &mut Diagnostics) -> ValueUntyped {
+        match self {
+            Ast::Block(b) => match b.last() {
+                Some(ast) => ast.const_eval(diagnostics),
+                None => ValueUntyped::Unit,
+            },
+            &Ast::Color(c) => ValueUntyped::Color(c),
+            ast => {
+                diagnostics.error(format!(
+                    "Expected literal or block, found {}",
+                    ast.variant_name()
+                ));
+                ValueUntyped::Unit
+            }
         }
     }
 }
@@ -349,5 +381,32 @@ l = #ABCDEfab",
                 ))])),
             }],
         );
+    }
+
+    #[test]
+    fn const_eval_literal() {
+        let ast = Ast::Color(AtomColor::from_u32(0x123456FF));
+        let mut diagnostics = Diagnostics::init();
+        assert_eq!(
+            ast.const_eval(&mut diagnostics),
+            ValueUntyped::Color(AtomColor::from_u32(0x123456FF)),
+        );
+    }
+
+    #[test]
+    fn const_eval_block() {
+        let ast = Ast::Block(vec![Ast::Color(AtomColor::from_u32(0x123456FF))]);
+        let mut diagnostics = Diagnostics::init();
+        assert_eq!(
+            ast.const_eval(&mut diagnostics),
+            ValueUntyped::Color(AtomColor::from_u32(0x123456FF)),
+        );
+    }
+
+    #[test]
+    fn const_eval_empty_block() {
+        let ast = Ast::Block(vec![]);
+        let mut diagnostics = Diagnostics::init();
+        assert_eq!(ast.const_eval(&mut diagnostics), ValueUntyped::Unit);
     }
 }

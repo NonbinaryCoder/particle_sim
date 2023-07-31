@@ -5,6 +5,7 @@ use super::id::{CreateInstanceWithId, IdMap, MappedToId};
 #[derive(Debug, Clone)]
 pub struct Element {
     pub color: AtomColor,
+    pub join_face: JoinFace,
 }
 
 pub type ElementId = u8;
@@ -13,6 +14,7 @@ impl Default for Element {
     fn default() -> Self {
         Self {
             color: AtomColor::WHITE,
+            join_face: JoinFace::SameAlpha,
         }
     }
 }
@@ -27,12 +29,14 @@ impl MappedToId for Element {
             b"Void",
             Element {
                 color: AtomColor::INVISIBLE,
+                ..Default::default()
             },
         );
         let _ = map.insert(
             b"Air",
             Element {
                 color: AtomColor::INVISIBLE,
+                ..Default::default()
             },
         );
         map
@@ -45,7 +49,7 @@ impl CreateInstanceWithId for Element {
     fn create_instance(&self, id: Self::Id) -> Self::Instance {
         Atom {
             color: self.color,
-            join_face: JoinFace::SameAlpha,
+            join_face: self.join_face,
             element: id,
         }
     }

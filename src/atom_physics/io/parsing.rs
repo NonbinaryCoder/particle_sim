@@ -1,8 +1,11 @@
-use crate::atom_physics::{
-    element::{Element, ElementId},
-    id::{IdMap, InsertError},
-    value::ValueUntyped,
-    PrettyPrint,
+use crate::{
+    atom_physics::{
+        element::{Element, ElementId},
+        id::{IdMap, InsertError},
+        value::ValueUntyped,
+        PrettyPrint,
+    },
+    terrain::JoinFace,
 };
 
 use self::ast::Ast;
@@ -56,7 +59,25 @@ fn parse_element(body: Vec<Ast>, diagnostics: &mut Diagnostics) -> Element {
                     ValueUntyped::Color(c) => element.color = c,
                     value => {
                         diagnostics.error(format!(
-                            "Property `color` expects a value of type `Color`, but found `{}`",
+                            "Property `color` expects a value of type `Color`, but found type `{}`",
+                            value.variant_name()
+                        ));
+                    }
+                },
+                b"join_face" => match value.const_eval(diagnostics) {
+                    ValueUntyped::EnumVariant(b"Never") => element.join_face = JoinFace::Never,
+                    ValueUntyped::EnumVariant(b"SameAlpha") => {
+                        element.join_face = JoinFace::SameAlpha
+                    }
+                    ValueUntyped::EnumVariant(variant) => {
+                        diagnostics.error(format!(
+                            "Property color expects a value of `Never` or `SameAlpha`, but found {}",
+                            PrettyPrint(variant)
+                        ));
+                    }
+                    value => {
+                        diagnostics.error(format!(
+                            "Property `color` expects a value of `Never` or `SameAlpha`, but found type `{}`",
                             value.variant_name()
                         ));
                     }

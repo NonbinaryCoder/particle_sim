@@ -66,6 +66,7 @@ impl<'a> Ast<'a> {
                 None => ValueUntyped::Unit,
             },
             &Ast::Color(c) => ValueUntyped::Color(c),
+            &Ast::Literal(l) => ValueUntyped::EnumVariant(l),
             ast => {
                 diagnostics.error(format!(
                     "Expected literal or block, found {}",

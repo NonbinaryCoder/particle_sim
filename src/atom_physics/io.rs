@@ -184,7 +184,8 @@ fn hot_reload_set(mut old: HotReloadParams, elements: IdMap<Element>) {
                 macro_rules! change_if_default {
                     ($( $field:ident ),+) => {
                         $(
-                            if atom.$field == old_element.$field {
+                            if atom.$field == old_element.$field
+                                && atom.$field != element.$field {
                                 atom.$field = element.$field
                             }
                         )+
@@ -192,6 +193,7 @@ fn hot_reload_set(mut old: HotReloadParams, elements: IdMap<Element>) {
                 }
 
                 change_if_default!(color);
+                change_if_default!(join_face);
             }
         }
     });

@@ -1,15 +1,17 @@
 use crate::terrain::color::AtomColor;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ValueUntyped {
+pub enum ValueUntyped<'a> {
     Color(AtomColor),
+    EnumVariant(&'a [u8]),
     Unit,
 }
 
-impl ValueUntyped {
+impl<'a> ValueUntyped<'a> {
     pub fn variant_name(&self) -> &'static str {
         match self {
-            ValueUntyped::Color(_) => "color",
+            ValueUntyped::Color(_) => "Color",
+            ValueUntyped::EnumVariant(_) => "Enum",
             ValueUntyped::Unit => "()",
         }
     }

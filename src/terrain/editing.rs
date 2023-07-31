@@ -1,73 +1,47 @@
 use bevy::prelude::*;
 
-use crate::player::{LookPos, Player, PlayerUpdateSet};
+use crate::{
+    atom_physics::{
+        element::{Element, ElementId},
+        id::IdMap,
+    },
+    player::{
+        bindings::{self, Binding, Bindings},
+        LookPos, Player, PlayerUpdateSet,
+    },
+};
 
-use super::{color::AtomColor, storage::Atoms, Atom, JoinFace};
+use super::storage::Atoms;
 
 pub struct EditingPlugin;
 
 impl Plugin for EditingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, place_atom_system.after(PlayerUpdateSet::Move));
+        app.add_systems(Update, place_atom_system.after(PlayerUpdateSet::Move))
+            .insert_resource(SelectedElement(1));
     }
 }
+
+#[derive(Debug, Default, Resource)]
+pub struct SelectedElement(pub ElementId);
 
 pub fn place_atom_system(
     mut world: ResMut<Atoms>,
     player_query: Query<&LookPos, With<Player>>,
-    keys: Res<Input<KeyCode>>,
+    bindings: Res<Bindings>,
+    mut inputs: <bindings::Button as Binding>::Inputs<'_, '_>,
+    elements: Res<IdMap<Element>>,
+    selected_element: Res<SelectedElement>,
 ) {
     let look_pos = player_query.single();
     if let Some(pos) = &look_pos.0 {
-        if keys.just_pressed(KeyCode::Q) {
-            let pos = pos.grid_pos.as_uvec3();
-            if world.contains_atom(pos) {
-                world.set(pos, Atom::AIR);
-            }
+        if bindings.break_atom.just_pressed(&mut inputs) && world.contains_atom(pos.grid_pos) {
+            world.set(pos.grid_pos.as_uvec3(), elements.air());
         }
-
-        let place_pos = (pos.grid_pos + pos.side.normal_ivec()).as_uvec3();
-        if world.contains_atom(place_pos) {
-            if keys.just_pressed(KeyCode::E) {
-                world.set(
-                    place_pos,
-                    Atom {
-                        color: AtomColor::WHITE,
-                        join_face: JoinFace::DEFAULT,
-                    },
-                );
-            } else if keys.just_pressed(KeyCode::Z) {
-                world.set(
-                    place_pos,
-                    Atom {
-                        color: AtomColor::from_u32(0xff0000ff),
-                        join_face: JoinFace::DEFAULT,
-                    },
-                );
-            } else if keys.just_pressed(KeyCode::X) {
-                world.set(
-                    place_pos,
-                    Atom {
-                        color: AtomColor::from_u32(0x00ff00ff),
-                        join_face: JoinFace::DEFAULT,
-                    },
-                );
-            } else if keys.just_pressed(KeyCode::R) {
-                world.set(
-                    place_pos,
-                    Atom {
-                        color: AtomColor::from_u32(0x0000ff99),
-                        join_face: JoinFace::Never,
-                    },
-                )
-            } else if keys.just_pressed(KeyCode::F) {
-                world.set(
-                    place_pos,
-                    Atom {
-                        color: AtomColor::from_u32(0x00ffff99),
-                        join_face: JoinFace::SameAlpha,
-                    },
-                )
+        let place_pos = pos.grid_pos + pos.side.normal_ivec();
+        if bindings.place_atom.just_pressed(&mut inputs) && world.contains_atom(place_pos) {
+            if let Some(atom) = elements.instance_of(selected_element.0) {
+                world.set(place_pos.as_uvec3(), atom);
             }
         }
     }

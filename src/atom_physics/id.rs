@@ -1,10 +1,11 @@
 use std::fmt;
 
+use bevy::prelude::Resource;
 use indexmap::{map::Entry, IndexMap};
 
 use super::PrettyPrint;
 
-#[derive(Clone)]
+#[derive(Clone, Resource)]
 pub struct IdMap<T: MappedToId>(IndexMap<Box<[u8]>, T>);
 
 impl<T: MappedToId> IdMap<T> {
@@ -25,6 +26,35 @@ impl<T: MappedToId> IdMap<T> {
                 }
             }
         }
+    }
+
+    pub fn get(&self, index: T::Id) -> Option<&T> {
+        self.0.get_index(index.to_usize()).map(|(_, value)| value)
+    }
+
+    pub fn get_full(&self, index: T::Id) -> Option<(&[u8], &T)> {
+        self.0
+            .get_index(index.to_usize())
+            .map(|(key, value)| (&**key, value))
+    }
+
+    pub fn get_full_by_name(&self, name: &[u8]) -> Option<(T::Id, &T)> {
+        self.0
+            .get_full(name)
+            .map(|(id, _, value)| (T::Id::from_usize(id), value))
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (T::Id, &[u8], &T)> {
+        self.0
+            .iter()
+            .enumerate()
+            .map(|(i, (key, value))| (T::Id::from_usize(i), &**key, value))
+    }
+}
+
+impl<T: CreateInstanceWithId> IdMap<T> {
+    pub fn instance_of(&self, id: T::Id) -> Option<T::Instance> {
+        self.get(id).map(|class| class.create_instance(id))
     }
 }
 
@@ -53,7 +83,7 @@ impl<T: MappedToId + fmt::Debug> fmt::Debug for IdMap<T> {
     }
 }
 
-pub trait Id {
+pub trait Id: Copy {
     fn to_usize(self) -> usize;
 
     fn from_usize(id: usize) -> Self;
@@ -89,4 +119,10 @@ pub trait MappedToId: Sized {
     fn create_map() -> IdMap<Self> {
         IdMap::new()
     }
+}
+
+pub trait CreateInstanceWithId: MappedToId {
+    type Instance;
+
+    fn create_instance(&self, id: Self::Id) -> Self::Instance;
 }

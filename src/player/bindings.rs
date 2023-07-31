@@ -19,6 +19,9 @@ pub struct Bindings {
     pub up_down: Axis,
 
     pub toggle_cursor: Button,
+
+    pub break_atom: Button,
+    pub place_atom: Button,
 }
 
 impl Default for Bindings {
@@ -44,6 +47,9 @@ impl Default for Bindings {
             },
 
             toggle_cursor: Button::Key(KeyCode::Escape),
+
+            break_atom: Button::Mouse(MouseButton::Left),
+            place_atom: Button::Mouse(MouseButton::Right),
         }
     }
 }
@@ -62,11 +68,13 @@ pub trait Binding {
 #[derive(Debug, Clone)]
 pub enum Button {
     Key(KeyCode),
+    Mouse(MouseButton),
 }
 
 #[derive(Debug, SystemParam)]
 pub struct ButtonInputs<'w> {
     keys: Res<'w, Input<KeyCode>>,
+    mouse: Res<'w, Input<MouseButton>>,
 }
 
 impl Binding for Button {
@@ -76,8 +84,11 @@ impl Binding for Button {
 
     /// Returns true if the button is currently pressed or was just pressed.
     fn value(&self, inputs: &mut Self::Inputs<'_, '_>) -> Self::Output {
-        match self {
-            &Button::Key(code) => inputs.keys.pressed(code) || inputs.keys.just_pressed(code),
+        match *self {
+            Button::Key(code) => inputs.keys.pressed(code) || inputs.keys.just_pressed(code),
+            Button::Mouse(button) => {
+                inputs.mouse.pressed(button) || inputs.mouse.just_pressed(button)
+            }
         }
     }
 }
@@ -87,8 +98,9 @@ impl Button {
         &self,
         inputs: &mut <Self as Binding>::Inputs<'_, '_>,
     ) -> <Self as Binding>::Output {
-        match self {
-            Button::Key(code) => inputs.keys.just_pressed(*code),
+        match *self {
+            Button::Key(code) => inputs.keys.just_pressed(code),
+            Button::Mouse(button) => inputs.mouse.just_pressed(button),
         }
     }
 }

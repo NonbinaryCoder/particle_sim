@@ -4,11 +4,16 @@ use std::{
     path::PathBuf,
 };
 
-use bevy::prelude::*;
+use bevy::{ecs::system::SystemParam, prelude::*};
+
+use crate::terrain::storage::Atoms;
 
 use self::diagnostics::Diagnostics;
 
-use super::{element::Element, id::MappedToId};
+use super::{
+    element::Element,
+    id::{IdMap, MappedToId},
+};
 
 mod diagnostics;
 mod parsing;
@@ -41,6 +46,7 @@ pub struct AvalibleSets(Vec<SetHandle>);
 fn load_set_system(
     mut event_reader: EventReader<LoadSet>,
     mut avalible_sets: ResMut<AvalibleSets>,
+    hot_reload_params: HotReloadParams,
 ) {
     let mut diagnostics = Diagnostics::init();
     let set_name = event_reader
@@ -59,7 +65,11 @@ fn load_set_system(
 
     if let Some(set_name) = set_name {
         if let Some(set) = avalible_sets.iter().find(|set| &set.name == set_name) {
-            load_set(set, &mut diagnostics);
+            if let Some(elements) = load_set(set, &mut diagnostics) {
+                if !diagnostics.has_errored() {
+                    hot_reload_set(hot_reload_params, elements);
+                }
+            }
         } else {
             // Uses Bevy diagnostic because end users should never encounter
             // this error.
@@ -91,16 +101,17 @@ fn load_avalible_sets(avalible_sets: &mut Vec<SetHandle>) -> io::Result<()> {
     Ok(())
 }
 
-fn load_set(set: &SetHandle, diagnostics: &mut Diagnostics) {
+fn load_set(set: &SetHandle, diagnostics: &mut Diagnostics) -> Option<IdMap<Element>> {
     let files = read_files(set, diagnostics);
-    if !diagnostics.has_errored() {
+    let ret = (!diagnostics.has_errored()).then(|| {
         let mut elements = Element::create_map();
         for ((_, file), id) in files.iter().zip(0..) {
             parsing::parse_file(file, id, diagnostics, &mut elements);
         }
-        dbg!(elements);
-    }
+        elements
+    });
     diagnostics.print_to_console(&files);
+    ret
 }
 
 #[must_use]
@@ -156,4 +167,33 @@ fn read_files(set: &SetHandle, diagnostics: &mut Diagnostics) -> Vec<(String, Ve
     }
 
     files
+}
+
+#[derive(Debug, SystemParam)]
+struct HotReloadParams<'w> {
+    world: ResMut<'w, Atoms>,
+    elements: ResMut<'w, IdMap<Element>>,
+}
+
+fn hot_reload_set(mut old: HotReloadParams, elements: IdMap<Element>) {
+    for atom in old.world.iter_mut() {
+        if let Some((name, old_element)) = old.elements.get_full(atom.element) {
+            if let Some((id, element)) = elements.get_full_by_name(name) {
+                atom.element = id;
+
+                macro_rules! change_if_default {
+                    ($( $field:ident ),+) => {
+                        $(
+                            if atom.$field == old_element.$field {
+                                atom.$field = element.$field
+                            }
+                        )+
+                    };
+                }
+
+                change_if_default!(color);
+            }
+        }
+    }
+    *old.elements = elements;
 }

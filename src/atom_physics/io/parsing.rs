@@ -1,6 +1,6 @@
 use crate::atom_physics::{
-    element::Element,
-    id::{IdMap, InsertError, MappedToId},
+    element::{Element, ElementId},
+    id::{IdMap, InsertError},
     value::ValueUntyped,
     PrettyPrint,
 };
@@ -35,7 +35,7 @@ pub fn parse_file(
                     Err(InsertError::NoMoreIds) => {
                         diagnostics.error(format!(
                             "Limit of {} elements exceeded",
-                            <Element as MappedToId>::Id::max_value()
+                            ElementId::max_value()
                         ));
                     }
                 }

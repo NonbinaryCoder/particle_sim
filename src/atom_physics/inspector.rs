@@ -1,7 +1,13 @@
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 
-use super::io::{AvalibleSets, LoadSet};
+use crate::terrain::editing::SelectedElement;
+
+use super::{
+    element::Element,
+    id::IdMap,
+    io::{AvalibleSets, LoadSet},
+};
 
 pub struct InspectorPlugin;
 
@@ -16,6 +22,8 @@ pub fn set_inspector_system(
     mut selected_set: Local<usize>,
     avalible_sets: Res<AvalibleSets>,
     mut load_set: EventWriter<LoadSet>,
+    elements: Res<IdMap<Element>>,
+    mut selected_element: ResMut<SelectedElement>,
 ) {
     egui::Window::new("Set Inspector")
         .default_width(200.0)
@@ -26,6 +34,19 @@ pub fn set_inspector_system(
                 avalible_sets.len(),
                 |i| &avalible_sets[i].name,
             );
+            for (id, name, _) in elements.iter() {
+                if ui
+                    .selectable_label(selected_element.0 == id, String::from_utf8_lossy(name))
+                    .clicked()
+                {
+                    selected_element.0 = id
+                }
+            }
+
+            if let Some(element) = elements.get(selected_element.0) {
+                ui.label(format!("{:#?}", element));
+            }
+
             ui.separator();
             if ui.button("Reload").clicked() {
                 load_set.send(LoadSet {

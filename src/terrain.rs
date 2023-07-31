@@ -7,10 +7,12 @@ use std::{
 
 use bevy::prelude::*;
 
+use crate::atom_physics::element::{Element, ElementId};
+
 use self::{color::AtomColor, storage::Atoms};
 
 pub mod color;
-mod editing;
+pub mod editing;
 pub mod rendering;
 pub mod storage;
 
@@ -27,6 +29,7 @@ impl Plugin for TerrainPlugin {
 pub struct Atom {
     pub color: AtomColor,
     pub join_face: JoinFace,
+    pub element: ElementId,
 }
 
 impl Default for Atom {
@@ -39,11 +42,13 @@ impl Atom {
     pub const VOID: Self = Self {
         color: AtomColor::INVISIBLE,
         join_face: JoinFace::DEFAULT,
+        element: Element::VOID_ID,
     };
 
     pub const AIR: Self = Self {
         color: AtomColor::INVISIBLE,
         join_face: JoinFace::DEFAULT,
+        element: Element::AIR_ID,
     };
 
     pub const fn is_visible(&self) -> bool {

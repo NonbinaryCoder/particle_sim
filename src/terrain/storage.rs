@@ -312,6 +312,10 @@ impl Atoms {
 
         None
     }
+
+    pub fn iter_mut(&mut self) -> std::slice::IterMut<Atom> {
+        self.atoms.iter_mut()
+    }
 }
 
 pub struct Chunks<'a> {
@@ -428,6 +432,7 @@ mod tests {
                         Atom {
                             color: AtomColor::from_u32(0xff0000ff),
                             join_face: JoinFace::SameAlpha,
+                            element: 2,
                         },
                     )
                 }

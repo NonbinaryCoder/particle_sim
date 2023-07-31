@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 
-use crate::terrain::editing::SelectedElement;
+use crate::player::SelectedElement;
 
 use super::{
     element::Element,

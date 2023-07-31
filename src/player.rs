@@ -5,6 +5,7 @@ use std::f32::consts::PI;
 use bevy::prelude::*;
 
 use crate::{
+    atom_physics::element::ElementId,
     terrain::storage::{Atoms, RaycastHit},
     ui::CursorGrabbed,
 };
@@ -12,6 +13,7 @@ use crate::{
 use self::bindings::{Binding, Bindings};
 
 pub mod bindings;
+mod building;
 mod inspector;
 mod rendering;
 
@@ -20,8 +22,9 @@ pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((
-            inspector::InspectorPlugin,
             bindings::BindingsPlugin,
+            building::BuildingPlugin,
+            inspector::InspectorPlugin,
             rendering::RenderingPlugin,
         ))
         .insert_resource(PlayerConfig {
@@ -70,6 +73,9 @@ pub struct PlayerConfig {
     reach_dist: f32,
     freecam_enabled: bool,
 }
+
+#[derive(Debug, Clone, Copy, Resource)]
+pub struct SelectedElement(pub ElementId);
 
 /// Marker component for the main player.
 #[derive(Debug, Component)]

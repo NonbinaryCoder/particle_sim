@@ -1,29 +1,23 @@
 use bevy::prelude::*;
 
 use crate::{
-    atom_physics::{
-        element::{Element, ElementId},
-        id::IdMap,
-    },
-    player::{
-        bindings::{self, Binding, Bindings},
-        LookPos, Player, PlayerUpdateSet,
-    },
+    atom_physics::{element::Element, id::IdMap},
+    terrain::storage::Atoms,
 };
 
-use super::storage::Atoms;
+use super::{
+    bindings::{self, Binding, Bindings},
+    LookPos, Player, PlayerUpdateSet, SelectedElement,
+};
 
-pub struct EditingPlugin;
+pub struct BuildingPlugin;
 
-impl Plugin for EditingPlugin {
+impl Plugin for BuildingPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Update, place_atom_system.after(PlayerUpdateSet::Move))
             .insert_resource(SelectedElement(1));
     }
 }
-
-#[derive(Debug, Default, Resource)]
-pub struct SelectedElement(pub ElementId);
 
 pub fn place_atom_system(
     mut world: ResMut<Atoms>,

@@ -194,6 +194,8 @@ fn hot_reload_set(mut old: HotReloadParams, elements: IdMap<Element>) {
 
                 change_if_default!(color);
                 change_if_default!(join_face);
+            } else {
+                *atom = elements.air();
             }
         }
     });

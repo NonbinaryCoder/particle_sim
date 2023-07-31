@@ -176,7 +176,7 @@ struct HotReloadParams<'w> {
 }
 
 fn hot_reload_set(mut old: HotReloadParams, elements: IdMap<Element>) {
-    for atom in old.world.iter_mut() {
+    old.world.modify_all(|mut atom| {
         if let Some((name, old_element)) = old.elements.get_full(atom.element) {
             if let Some((id, element)) = elements.get_full_by_name(name) {
                 atom.element = id;
@@ -194,6 +194,6 @@ fn hot_reload_set(mut old: HotReloadParams, elements: IdMap<Element>) {
                 change_if_default!(color);
             }
         }
-    }
+    });
     *old.elements = elements;
 }

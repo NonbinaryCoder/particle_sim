@@ -140,4 +140,24 @@ impl ChunkData {
     fn update_count(count: &mut u16, mut f: impl FnMut(&Atom) -> bool, old: &Atom, new: &Atom) {
         *count = count.wrapping_add_signed(f(new) as i16 - f(old) as i16);
     }
+
+    /// Implementation detail of `Atoms::modify_all`; not intended to be used
+    /// elsewhere.
+    pub(super) fn __reset_counts(&mut self) {
+        self.by_opacity.opaque.atoms = 0;
+        self.by_opacity.transparent.atoms = 0;
+    }
+
+    /// Implementation detail of `Atoms::modify_all`; not intended to be used
+    /// elsewhere.
+    pub(super) fn __add_atom(&mut self, atom: &Atom) {
+        macro_rules! update_count {
+            ($( $count:ident ).+, $fn:expr) => {
+                self.$( $count ).+ += $fn(atom) as u16
+            };
+        }
+
+        update_count!(by_opacity.opaque.atoms, Atom::is_opaque);
+        update_count!(by_opacity.transparent.atoms, Atom::is_transparent);
+    }
 }

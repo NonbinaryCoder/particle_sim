@@ -11,6 +11,7 @@ use crate::atom_physics::element::{Element, ElementId};
 
 use self::{color::AtomColor, storage::Atoms};
 
+pub mod change_detection;
 pub mod color;
 pub mod rendering;
 pub mod storage;

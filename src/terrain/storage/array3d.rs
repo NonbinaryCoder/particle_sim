@@ -51,10 +51,6 @@ impl<T, C: SpaceFillingCurve> Array3d<T, C> {
     pub fn get_or<'a>(&'a self, index: impl GridPos, default: &'a T) -> &'a T {
         self.get(index.to_uvec3()).unwrap_or(default)
     }
-
-    pub fn iter_mut(&mut self) -> std::slice::IterMut<T> {
-        self.data.iter_mut()
-    }
 }
 
 impl<T, C: IterableCurve> Array3d<T, C> {

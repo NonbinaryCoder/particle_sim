@@ -12,7 +12,7 @@ use crate::{
 
 use self::array3d::{Array3d, GridPos};
 
-use super::{rendering::ChunkData, Atom, Direction};
+use super::{change_detection::DetectChanges, rendering::ChunkData, Atom, Direction};
 
 mod array3d;
 
@@ -104,6 +104,29 @@ impl Atoms {
         Chunks {
             chunk_iter: self.chunks.iter_mut_labeled(),
             atoms: &self.atoms,
+        }
+    }
+
+    /// Grants mutable access to every atom sequentially, in a way that makes
+    /// modification faster than using [`Self::set`] on each atom.
+    pub fn modify_all(&mut self, mut f: impl FnMut(DetectChanges<Atom>)) {
+        for (chunk_data, chunk_pos) in self.chunks.iter_mut_labeled() {
+            let offset = chunk_pos * CHUNK_SIZE as u32;
+            chunk_data.__reset_counts();
+            for x in 0..CHUNK_SIZE as u32 {
+                for y in 0..CHUNK_SIZE as u32 {
+                    for z in 0..CHUNK_SIZE as u32 {
+                        let atom = &mut self.atoms[offset + UVec3 { x, y, z }];
+                        let mut changed = false;
+                        f(DetectChanges::new(atom, &mut changed));
+
+                        if changed {
+                            chunk_data.mark_changed();
+                        }
+                        chunk_data.__add_atom(atom);
+                    }
+                }
+            }
         }
     }
 
@@ -311,10 +334,6 @@ impl Atoms {
         }
 
         None
-    }
-
-    pub fn iter_mut(&mut self) -> std::slice::IterMut<Atom> {
-        self.atoms.iter_mut()
     }
 }
 

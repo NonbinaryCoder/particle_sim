@@ -1,23 +1,10 @@
-use std::{borrow::Cow, fmt::Write, mem};
+use std::ops::{Deref, DerefMut};
 
-use unicode_width::UnicodeWidthStr;
+use nom_locate::LocatedSpan;
 
-use super::parsing::Position;
+use crate::atom_physics::id::IdMap;
 
-#[derive(Debug, Clone)]
-pub struct Diagnostic {
-    level: Level,
-    position: Option<Position>,
-    text: Cow<'static, str>,
-}
-
-impl Diagnostic {
-    const NULL: Self = Self {
-        level: Level::Warn,
-        position: None,
-        text: Cow::Borrowed(""),
-    };
-}
+use super::FileContents;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum Level {
@@ -26,9 +13,101 @@ pub enum Level {
     Error,
 }
 
+pub type Span<'a> = LocatedSpan<&'a str, FileId>;
+
+pub type FileId = u16;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Position {
+    file: FileId,
+    offset: usize,
+    line: u32,
+    length: u16,
+}
+
+impl Position {
+    #[cfg(test)]
+    pub const TEST: Self = Self {
+        file: 0,
+        offset: 0,
+        line: 0,
+        length: 0,
+    };
+
+    /// `start..end`
+    pub fn from_start_end(start: Span, end: Span) -> Position {
+        debug_assert_eq!(
+            start.extra, end.extra,
+            "Nothing should cross file boundaries like this"
+        );
+        assert!(start.location_offset() <= end.location_offset());
+        Self {
+            file: start.extra,
+            offset: start.location_offset(),
+            line: start.location_line(),
+            length: (end.location_offset() - start.location_offset()) as u16,
+        }
+    }
+
+    pub fn position<T>(self, object: T) -> Positioned<T> {
+        Positioned {
+            object,
+            position: self,
+        }
+    }
+}
+
+impl<'a> From<Span<'a>> for Position {
+    fn from(value: Span<'a>) -> Self {
+        Self {
+            file: value.extra,
+            offset: value.location_offset(),
+            line: value.location_line(),
+            length: value.len().try_into().unwrap_or(u16::MAX),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Positioned<T> {
+    pub object: T,
+    pub position: Position,
+}
+
+impl<T> Deref for Positioned<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        &self.object
+    }
+}
+
+impl<T> DerefMut for Positioned<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.object
+    }
+}
+
+impl<'a> From<Span<'a>> for Positioned<&'a str> {
+    fn from(value: Span<'a>) -> Self {
+        Self {
+            object: *value,
+            position: value.into(),
+        }
+    }
+}
+
+pub trait Diagnostic: std::fmt::Debug {
+    fn level(&self) -> Level;
+
+    fn description(&self, _buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub struct Diagnostics {
-    diagnostics: Vec<Diagnostic>,
+    diagnostics: Vec<Box<dyn Diagnostic>>,
     errored: bool,
 }
 
@@ -40,31 +119,9 @@ impl Diagnostics {
         }
     }
 
-    pub fn add(&mut self, diagnostic: Diagnostic) {
-        self.errored |= diagnostic.level == Level::Warn;
-        self.diagnostics.push(diagnostic);
-    }
-
-    pub fn warn(&mut self, text: impl Into<Cow<'static, str>>) -> DiagnosticBuilder {
-        DiagnosticBuilder {
-            collection: self,
-            diagnostic: Diagnostic {
-                level: Level::Warn,
-                position: None,
-                text: text.into(),
-            },
-        }
-    }
-
-    pub fn error(&mut self, text: impl Into<Cow<'static, str>>) -> DiagnosticBuilder {
-        DiagnosticBuilder {
-            collection: self,
-            diagnostic: Diagnostic {
-                level: Level::Error,
-                position: None,
-                text: text.into(),
-            },
-        }
+    pub fn add(&mut self, diagnostic: impl Diagnostic + 'static) {
+        self.errored |= diagnostic.level() == Level::Warn;
+        self.diagnostics.push(Box::new(diagnostic));
     }
 
     pub fn has_errored(&self) -> bool {
@@ -76,82 +133,9 @@ impl Diagnostics {
         self.diagnostics.is_empty()
     }
 
-    pub fn print_to_console(&self, files: &[(String, Vec<u8>)]) {
+    pub(super) fn print_to_console(&self, _files: &IdMap<FileContents>) {
         for diagnostic in &self.diagnostics {
-            let Diagnostic {
-                level,
-                position,
-                text,
-            } = diagnostic;
-            match level {
-                Level::Warn => print!("warning: "),
-                Level::Error => print!("error: "),
-            }
-            println!("{text}");
-
-            if let Some(position) = position {
-                let (name, file) = &files[position.file as usize];
-                if let Ok(file) = std::str::from_utf8(file) {
-                    let (line, col, line_text) = line_col(file, position.index);
-                    println!("  --> {name}:{line}:{col}");
-                    println!("   |");
-                    println!("{line:<3}| {line_text}");
-                    print!("   | ");
-                    for _ in 1..col {
-                        print!(" ");
-                    }
-                    println!("^");
-                    println!("   |");
-                }
-            }
+            dbg!(diagnostic);
         }
     }
-}
-
-#[derive(Debug)]
-pub struct DiagnosticBuilder<'a> {
-    collection: &'a mut Diagnostics,
-    diagnostic: Diagnostic,
-}
-
-impl<'a> DiagnosticBuilder<'a> {
-    pub fn position(mut self, position: Position) -> Self {
-        self.diagnostic.position = Some(position);
-        self
-    }
-
-    pub fn context(mut self, context: impl std::fmt::Display) -> Self {
-        // Writing to a string never fails.
-        let _ = write!(self.diagnostic.text.to_mut(), ": {}", context);
-        self
-    }
-
-    pub fn quoted_context(mut self, context: impl std::fmt::Display) -> Self {
-        // Writing to a string never fails.
-        let _ = write!(self.diagnostic.text.to_mut(), ": \"{}\"", context);
-        self
-    }
-
-    pub fn w(self) {}
-}
-
-impl<'a> Drop for DiagnosticBuilder<'a> {
-    fn drop(&mut self) {
-        self.collection
-            .add(mem::replace(&mut self.diagnostic, Diagnostic::NULL));
-    }
-}
-
-fn line_col(text: &str, mut position: u32) -> (u32, u32, &str) {
-    let mut index = 1;
-    for line in text.lines() {
-        let len = UnicodeWidthStr::width(line);
-        if len as u32 >= position {
-            return (index, position + 1, line);
-        } else {
-            position -= len as u32 + 1;
-            index += 1;
-        }
-    }
-    (index, position, "")
 }

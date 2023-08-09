@@ -1,303 +1,296 @@
-use core::fmt;
-
-use crate::{
-    atom_physics::{io::diagnostics::Diagnostics, value::ValueUntyped},
-    terrain::color::AtomColor,
+use nom::{
+    branch::alt,
+    bytes::complete::{tag, take_till, take_while1},
+    character::complete::{alphanumeric1, char, multispace0},
+    combinator::recognize,
+    error::ErrorKind,
+    sequence::{delimited, pair, preceded, separated_pair, terminated},
+    Parser,
 };
 
-use super::{
-    tokenizer::{BracketTy, Token, Tokenizer},
-    Keyword, Modifier, Operator, Position, PrettyPrint,
+use crate::atom_physics::io::{
+    diagnostics::{self, Diagnostic, Diagnostics, Position, Positioned, Span},
+    FileId,
 };
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub enum Ast<'a> {
-    Literal(&'a [u8]),
-    Block(Vec<Ast<'a>>),
-    Color(AtomColor),
+    Block(Positioned<Vec<Ast<'a>>>),
+    Ident(Positioned<&'a str>),
+    HexColor(Positioned<&'a str>),
     Element {
-        name: &'a [u8],
+        name: Positioned<&'a str>,
         body: Vec<Ast<'a>>,
     },
     VariableAssign {
-        variable: &'a [u8],
+        variable: Positioned<&'a str>,
         value: Box<Ast<'a>>,
     },
 }
 
-impl<'a> fmt::Debug for Ast<'a> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Ast::Literal(l) => f
-                .debug_tuple("Ast::Literal")
-                .field(&PrettyPrint(l))
-                .finish(),
-            Ast::Block(b) => f.debug_tuple("Ast::Block").field(b).finish(),
-            Ast::Color(c) => f.debug_tuple("Ast::Color").field(c).finish(),
-            Ast::Element { name, body } => f
-                .debug_struct("Ast::Element")
-                .field("name", &PrettyPrint(name))
-                .field("body", body)
-                .finish(),
-            Ast::VariableAssign { variable, value } => f
-                .debug_struct("Ast::VariableAssign")
-                .field("variable", &PrettyPrint(variable))
-                .field("value", value)
-                .finish(),
+impl<'a> PartialEq for Ast<'a> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Ast::Ident(a), Ast::Ident(b)) => a.object == b.object,
+            (Ast::Block(a), Ast::Block(b)) => a.object == b.object,
+            (Ast::HexColor(a), Ast::HexColor(b)) => a.object == b.object,
+            (
+                Ast::Element {
+                    name: a_name,
+                    body: a_body,
+                    ..
+                },
+                Ast::Element {
+                    name: b_name,
+                    body: b_body,
+                    ..
+                },
+            ) => a_name.object == b_name.object && a_body == b_body,
+            (
+                Ast::VariableAssign {
+                    variable: a_var,
+                    value: a_val,
+                    ..
+                },
+                Ast::VariableAssign {
+                    variable: b_var,
+                    value: b_val,
+                    ..
+                },
+            ) => a_var.object == b_var.object && a_val == b_val,
+            _ => false,
         }
     }
 }
+
+impl<'a> Eq for Ast<'a> {}
 
 impl<'a> Ast<'a> {
-    pub fn variant_name(&self) -> &'static str {
+    pub fn parse(contents: &'a str, file: FileId, diagnostics: &mut Diagnostics) -> Vec<Ast<'a>> {
+        let s = Span::new_extra(contents, file);
+
+        match block(BlockTy::File)(trim_start(s)) {
+            Ok((_, asts)) => asts.object,
+            Err(e) => {
+                let e = match e {
+                    nom::Err::Incomplete(_) => unreachable!(),
+                    nom::Err::Error(e) => e,
+                    nom::Err::Failure(e) => e,
+                };
+                diagnostics.add(e);
+                Vec::new()
+            }
+        }
+    }
+}
+
+type IResult<'a, O, E = ParseError> = nom::IResult<Span<'a>, O, E>;
+
+fn ast(s: Span<'_>) -> IResult<'_, Ast<'_>> {
+    alt((
+        block(BlockTy::Bracket).map(Ast::Block),
+        element,
+        variable_assign,
+        ident.map(Ast::Ident),
+        hex_color,
+    ))(s)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BlockTy {
+    Bracket,
+    File,
+}
+
+impl BlockTy {
+    pub fn open(self, s: Span<'_>) -> IResult<'_, ()> {
         match self {
-            Ast::Literal(_) => "literal",
-            Ast::Block(_) => "block",
-            Ast::Color(_) => "color",
-            Ast::Element { .. } => "element",
-            Ast::VariableAssign { .. } => "variable assign",
+            BlockTy::Bracket => char('{').and(multispace0).map(drop).parse(s),
+            BlockTy::File => Ok((s, ())),
         }
     }
 
-    pub fn const_eval(&self, diagnostics: &mut Diagnostics) -> ValueUntyped {
+    pub fn close(self, s: Span<'_>) -> IResult<'_, ()> {
+        let s = trim_start(s);
         match self {
-            Ast::Block(b) => match b.last() {
-                Some(ast) => ast.const_eval(diagnostics),
-                None => ValueUntyped::Unit,
-            },
-            &Ast::Color(c) => ValueUntyped::Color(c),
-            &Ast::Literal(l) => ValueUntyped::EnumVariant(l),
-            ast => {
-                diagnostics.error(format!(
-                    "Expected literal or block, found {}",
-                    ast.variant_name()
-                ));
-                ValueUntyped::Unit
-            }
+            BlockTy::Bracket => char('}').and(multispace0).map(drop).parse(s),
+            BlockTy::File if s.len() == 0 => Ok((s, ())),
+            BlockTy::File => ParseErrorKind::ExpectedEof.at(s).error(),
         }
     }
 }
 
-pub fn parse_block<'a>(
-    tokens: &mut Tokenizer<'a>,
-    start_pos: Option<Position>,
-    diagnostics: &mut Diagnostics,
-) -> Vec<Ast<'a>> {
-    let mut ast = Vec::new();
-    while let Some((token, pos)) = tokens.next() {
-        match token {
-            Token::Keyword(Keyword::Element) => ast.push(parse_element(tokens, diagnostics)),
-            Token::Operator(o) => {
-                diagnostics
-                    .error("Unexpected operator")
-                    .quoted_context(o.variant_name())
-                    .position(pos);
-            }
-            Token::Modifier(Modifier::HexColor) => {
-                ast.push(Ast::Color(parse_hex_color(tokens, diagnostics)))
-            }
-            Token::Literal(l) => match tokens.next() {
-                None => {
-                    diagnostics.error("Expected \"=\", found EOF");
+fn block(ty: BlockTy) -> impl Fn(Span<'_>) -> IResult<'_, Positioned<Vec<Ast<'_>>>> {
+    move |original| {
+        let mut block = Vec::new();
+        let (mut s, ()) = ty.open(original)?;
+        loop {
+            match ty.close(s) {
+                Ok((rem, ())) => {
+                    break Ok((rem, Position::from_start_end(original, rem).position(block)))
                 }
-                Some((Token::Operator(Operator::Assign), _)) => ast.push(Ast::VariableAssign {
-                    variable: l,
-                    value: Box::new(parse_value(tokens, diagnostics)),
-                }),
-                Some((token, pos)) => {
-                    diagnostics
-                        .error(format!("Expected \"=\", found {}", token))
-                        .position(pos);
-                }
-            },
-            Token::Bracket {
-                ty: BracketTy::Curvy,
-                open: true,
-            } => ast.push(Ast::Block(parse_block(tokens, Some(pos), diagnostics))),
-            Token::Bracket { open: false, .. } => {
-                if start_pos.is_some() {
-                    return ast;
-                } else {
-                    diagnostics.error("Unmatched closing bracket").position(pos);
-                }
-            }
-            Token::Newline => {}
-        }
-    }
-    ast
-}
-
-fn parse_value<'a>(tokens: &mut Tokenizer<'a>, diagnostics: &mut Diagnostics) -> Ast<'a> {
-    match tokens.skip_whitespace().next() {
-        Some((Token::Keyword(kw), pos)) => {
-            diagnostics
-                .error("Unexpected keyword")
-                .quoted_context(kw.variant_name())
-                .position(pos);
-            Ast::Block(Vec::new())
-        }
-        Some((Token::Operator(o), pos)) => {
-            diagnostics
-                .error("Unexpected operator")
-                .quoted_context(o.variant_name())
-                .position(pos);
-            Ast::Block(Vec::new())
-        }
-        Some((Token::Modifier(Modifier::HexColor), _)) => {
-            Ast::Color(parse_hex_color(tokens, diagnostics))
-        }
-        Some((
-            Token::Bracket {
-                ty: BracketTy::Curvy,
-                open: true,
-            },
-            pos,
-        )) => return Ast::Block(parse_block(tokens, Some(pos), diagnostics)),
-        Some((Token::Bracket { open: false, .. }, pos)) => {
-            diagnostics
-                .error("Unexpected closing bracket")
-                .position(pos);
-            Ast::Block(Vec::new())
-        }
-        Some((Token::Literal(l), _)) => Ast::Literal(l),
-        Some((Token::Newline, _)) => unreachable!(),
-        None => {
-            diagnostics.error("Missing value");
-            Ast::Block(Vec::new())
-        }
-    }
-}
-
-fn parse_hex_color(tokens: &mut Tokenizer, diagnostics: &mut Diagnostics) -> AtomColor {
-    match tokens.skip_whitespace().next() {
-        Some((Token::Literal(value), pos)) => {
-            for item in value {
-                match item {
-                    b'0'..=b'9' | b'a'..=b'f' | b'A'..=b'F' => {}
-                    _ => {
-                        diagnostics
-                            .error("Hex color values must be in the range 0 to F")
-                            .position(pos);
-
-                        return AtomColor::INVISIBLE;
-                    }
-                }
-            }
-
-            fn map(v: u8) -> u8 {
-                match v {
-                    b'0'..=b'9' => v - b'0',
-                    b'a'..=b'f' => v - b'a' + 0xA,
-                    b'A'..=b'F' => v - b'A' + 0xA,
-                    _ => 0,
-                }
-            }
-
-            match *value {
-                [r, g, b] => AtomColor::from_parts(map(r) << 4, map(g) << 4, map(b) << 4, 0xFF),
-                [r, g, b, a] => {
-                    AtomColor::from_parts(map(r) << 4, map(g) << 4, map(b) << 4, map(a) << 4)
-                }
-                [r0, r1, g0, g1, b0, b1] => AtomColor::from_parts(
-                    map(r0) << 4 | map(r1),
-                    map(g0) << 4 | map(g1),
-                    map(b0) << 4 | map(b1),
-                    0xFF,
-                ),
-                [r0, r1, g0, g1, b0, b1, a0, a1] => AtomColor::from_parts(
-                    map(r0) << 4 | map(r1),
-                    map(g0) << 4 | map(g1),
-                    map(b0) << 4 | map(b1),
-                    map(a0) << 4 | map(a1),
-                ),
-                _ => {
-                    diagnostics
-                        .error("Hex color values must have 3, 4, 6, or 8 elements")
-                        .position(pos);
-                    AtomColor::INVISIBLE
-                }
-            }
-        }
-        Some((token, pos)) => {
-            diagnostics
-                .error(format!("Expected hex color literal, found {}", token))
-                .position(pos);
-            AtomColor::INVISIBLE
-        }
-        None => {
-            diagnostics.error("Missing value");
-            AtomColor::INVISIBLE
-        }
-    }
-}
-
-fn parse_element<'a>(tokens: &mut Tokenizer<'a>, diagnostics: &mut Diagnostics) -> Ast<'a> {
-    let name = match tokens.skip_whitespace().next() {
-        Some((Token::Literal(name), _)) => name,
-        None => {
-            diagnostics.error("Expected element name, found EOF");
-            return Ast::Element {
-                name: b"",
-                body: Vec::new(),
+                Err(e) if s.len() == 0 => break Err(e),
+                Err(_) => {}
             };
+            let next;
+            (s, next) = ast(s)?;
+            block.push(next);
         }
-        Some((token, pos)) => {
-            diagnostics
-                .error(format!("Expected element name, found {}", token))
-                .position(pos);
-            b""
-        }
-    };
-    let body = match tokens.skip_whitespace().next() {
-        Some((
-            Token::Bracket {
-                ty: BracketTy::Curvy,
-                open: true,
+    }
+}
+
+fn ident(s: Span<'_>) -> IResult<'_, Positioned<&'_ str>> {
+    terminated(
+        recognize(pair(
+            take_while1(|ch: char| {
+                !ch.is_whitespace() && !ch.is_ascii_digit() && !ch.is_ascii_punctuation()
+            }),
+            take_till(char::is_whitespace),
+        )),
+        multispace0,
+    )
+    .map(Into::into)
+    .parse(s)
+    .map_err(|err| {
+        err.map(|err| ParseError {
+            kind: ParseErrorKind::ExpectedIdentifier,
+            ..err
+        })
+    })
+}
+
+fn hex_color(s: Span<'_>) -> IResult<'_, Ast<'_>> {
+    delimited(char('#'), alphanumeric1, multispace0)
+        .map(|color: Span| Ast::HexColor(color.into()))
+        .parse(s)
+}
+
+fn variable_assign(s: Span<'_>) -> IResult<'_, Ast<'_>> {
+    separated_pair(ident, pair(char('='), multispace0), ast)
+        .map(|(name, value)| Ast::VariableAssign {
+            variable: name,
+            value: Box::new(value),
+        })
+        .parse(s)
+}
+
+fn element(s: Span<'_>) -> IResult<'_, Ast<'_>> {
+    preceded(
+        tag("element").and(multispace0),
+        separated_pair(ident, multispace0, block(BlockTy::Bracket)),
+    )
+    .map(|(name, body)| Ast::Element {
+        name,
+        body: body.object,
+    })
+    .parse(s)
+    .map_err(|err| {
+        err.map(|err| match err.kind {
+            ParseErrorKind::Nom(ErrorKind::Tag) => ParseError {
+                kind: ParseErrorKind::ExpectedKeywordElement,
+                ..err
             },
-            pos,
-        )) => parse_block(tokens, Some(pos), diagnostics),
-        None => {
-            diagnostics.error("Expected element body, found EOF");
-            Vec::new()
+            _ => err,
+        })
+    })
+}
+
+fn trim_start(s: Span<'_>) -> Span<'_> {
+    multispace0::<_, ()>(s).unwrap().0
+}
+
+#[derive(Debug, Clone)]
+pub struct ParseError {
+    pub position: Position,
+    pub kind: ParseErrorKind,
+}
+
+impl ParseError {
+    pub fn error<T>(self) -> Result<T, nom::Err<Self>> {
+        Err(nom::Err::Error(self))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum ParseErrorKind {
+    Nom(ErrorKind),
+    WrongChar { expected: char },
+    ExpectedIdentifier,
+    ExpectedKeywordElement,
+    ExpectedEof,
+}
+
+impl ParseErrorKind {
+    pub fn at(self, pos: impl Into<Position>) -> ParseError {
+        ParseError {
+            position: pos.into(),
+            kind: self,
         }
-        Some((token, pos)) => {
-            diagnostics
-                .error(format!("Expected \"{{\", found {}", token))
-                .position(pos);
-            Vec::new()
+    }
+}
+
+impl<'a> nom::error::ParseError<Span<'a>> for ParseError {
+    fn from_error_kind(input: Span<'a>, kind: ErrorKind) -> Self {
+        let kind = match kind {
+            ErrorKind::AlphaNumeric => ParseErrorKind::ExpectedIdentifier,
+            kind => ParseErrorKind::Nom(kind),
+        };
+        ParseError {
+            position: input.into(),
+            kind,
         }
-    };
-    Ast::Element { name, body }
+    }
+
+    fn append(_: Span<'a>, _: ErrorKind, other: Self) -> Self {
+        other
+    }
+
+    fn from_char(input: Span<'a>, ch: char) -> Self {
+        ParseErrorKind::WrongChar { expected: ch }.at(input)
+    }
+}
+
+impl Diagnostic for ParseError {
+    fn level(&self) -> diagnostics::Level {
+        diagnostics::Level::Error
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::atom_physics::io::parsing::tokenizer;
+    use crate::atom_physics::{id::MappedToId, io::FileContents};
 
     use super::*;
 
-    fn parsing_test(input: &[u8], output: &[Ast]) {
+    fn parsing_test(input: &str, output: &[Ast]) {
         let mut diagnostics = Diagnostics::init();
-        let parsed_block = parse_block(&mut tokenizer::tokenize(input, 0), None, &mut diagnostics);
+        let parsed_block = Ast::parse(input, 0, &mut diagnostics);
         if !diagnostics.is_empty() {
-            diagnostics.print_to_console(&[("input".to_owned(), input.to_vec())]);
+            let mut map = FileContents::create_map();
+            map.insert("input", FileContents(input.to_owned())).unwrap();
+            diagnostics.print_to_console(&map);
             panic!("No diagnostics should appear in a successful parse");
         }
         assert_eq!(parsed_block, output);
     }
 
     #[test]
+    fn literal() {
+        parsing_test("Name", &[Ast::Ident(Position::TEST.position("Name"))]);
+    }
+
+    #[test]
     fn element() {
         parsing_test(
-            b"\
+            "\
 element Bedrock {
     color = #686868
 }",
             &[Ast::Element {
-                name: b"Bedrock",
+                name: Position::TEST.position("Bedrock"),
                 body: vec![Ast::VariableAssign {
-                    variable: b"color",
-                    value: Box::new(Ast::Color(AtomColor::from_u32(0x686868FF))),
+                    variable: Position::TEST.position("color"),
+                    value: Box::new(Ast::HexColor(Position::TEST.position("686868"))),
                 }],
             }],
         );
@@ -306,42 +299,49 @@ element Bedrock {
     #[test]
     fn variable_assign() {
         parsing_test(
-            b"color = #FFFFFF",
+            "color = #FFFFFF",
             &[Ast::VariableAssign {
-                variable: b"color",
-                value: Box::new(Ast::Color(AtomColor::from_u32(0xFFFFFFFF))),
+                variable: Position::TEST.position("color"),
+                value: Box::new(Ast::HexColor(Position::TEST.position("FFFFFF"))),
             }],
         );
     }
 
     #[test]
     fn empty_block() {
-        parsing_test(b"{}", &[Ast::Block(Vec::new())]);
+        parsing_test("{}", &[Ast::Block(Position::TEST.position(Vec::new()))]);
     }
 
     #[test]
     fn empty_block_in_block() {
-        parsing_test(b"{{}}", &[Ast::Block(vec![Ast::Block(Vec::new())])]);
+        parsing_test(
+            "{{}}",
+            &[Ast::Block(Position::TEST.position(vec![Ast::Block(
+                Position::TEST.position(Vec::new()),
+            )]))],
+        );
     }
 
     #[test]
     fn empty_blocks_many_newlines() {
         parsing_test(
-            b"{\n\n{\n}\n}\n\n",
-            &[Ast::Block(vec![Ast::Block(Vec::new())])],
+            "\n   {\n \n{  \n}\n}\n\n",
+            &[Ast::Block(Position::TEST.position(vec![Ast::Block(
+                Position::TEST.position(Vec::new()),
+            )]))],
         );
     }
 
     #[test]
     fn hex_colors() {
-        fn va(name: &[u8], value: u32) -> Ast {
+        fn va<'a>(name: &'a str, value: &'a str) -> Ast<'a> {
             Ast::VariableAssign {
-                variable: name,
-                value: Box::new(Ast::Color(AtomColor::from_u32(value))),
+                variable: Position::TEST.position(name),
+                value: Box::new(Ast::HexColor(Position::TEST.position(value))),
             }
         }
         parsing_test(
-            b"\
+            "\
 a = #012
 b = #abc
 c = #ABC
@@ -353,61 +353,51 @@ h = #abcdef
 i = #ABCDEF
 j = #01234567
 k = #abcdefab
-l = #ABCDEfab",
+l = #ABCDEfa",
             &[
-                va(b"a", 0x001020FF),
-                va(b"b", 0xA0B0C0FF),
-                va(b"c", 0xA0B0C0FF),
-                va(b"d", 0x00102030),
-                va(b"e", 0xA0B0C0D0),
-                va(b"f", 0xA0B0C0D0),
-                va(b"g", 0x012345FF),
-                va(b"h", 0xABCDEFFF),
-                va(b"i", 0xABCDEFFF),
-                va(b"j", 0x01234567),
-                va(b"k", 0xABCDEFAB),
-                va(b"l", 0xABCDEFAB),
+                va("a", "012"),
+                va("b", "abc"),
+                va("c", "ABC"),
+                va("d", "0123"),
+                va("e", "abcd"),
+                va("f", "ABCD"),
+                va("g", "012345"),
+                va("h", "abcdef"),
+                va("i", "ABCDEF"),
+                va("j", "01234567"),
+                va("k", "abcdefab"),
+                va("l", "ABCDEfa"),
             ],
         );
     }
 
     #[test]
+    fn enum_variants() {
+        fn va<'a>(name: &'a str, value: &'a str) -> Ast<'a> {
+            Ast::VariableAssign {
+                variable: Position::TEST.position(name),
+                value: Box::new(Ast::Ident(Position::TEST.position(value))),
+            }
+        }
+
+        parsing_test(
+            "\
+a = SameAlpha
+b = OtherThing",
+            &[va("a", "SameAlpha"), va("b", "OtherThing")],
+        )
+    }
+
+    #[test]
     fn value_in_block() {
         parsing_test(
-            b"color = { #FFFFFF }",
+            "color = { #FFFFFF }",
             &[Ast::VariableAssign {
-                variable: b"color",
-                value: Box::new(Ast::Block(vec![Ast::Color(AtomColor::from_u32(
-                    0xFFFFFFFF,
-                ))])),
+                variable: Position::TEST.position("color"),
+                value: Box::new(Ast::Block(
+                    Position::TEST.position(vec![Ast::HexColor(Position::TEST.position("FFFFFF"))]),
+                )),
             }],
         );
-    }
-
-    #[test]
-    fn const_eval_literal() {
-        let ast = Ast::Color(AtomColor::from_u32(0x123456FF));
-        let mut diagnostics = Diagnostics::init();
-        assert_eq!(
-            ast.const_eval(&mut diagnostics),
-            ValueUntyped::Color(AtomColor::from_u32(0x123456FF)),
-        );
-    }
-
-    #[test]
-    fn const_eval_block() {
-        let ast = Ast::Block(vec![Ast::Color(AtomColor::from_u32(0x123456FF))]);
-        let mut diagnostics = Diagnostics::init();
-        assert_eq!(
-            ast.const_eval(&mut diagnostics),
-            ValueUntyped::Color(AtomColor::from_u32(0x123456FF)),
-        );
-    }
-
-    #[test]
-    fn const_eval_empty_block() {
-        let ast = Ast::Block(vec![]);
-        let mut diagnostics = Diagnostics::init();
-        assert_eq!(ast.const_eval(&mut diagnostics), ValueUntyped::Unit);
     }
 }

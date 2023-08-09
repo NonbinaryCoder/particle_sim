@@ -36,7 +36,7 @@ pub fn set_inspector_system(
             );
             for (id, name, _) in elements.iter() {
                 if ui
-                    .selectable_label(selected_element.0 == id, String::from_utf8_lossy(name))
+                    .selectable_label(selected_element.0 == id, name)
                     .clicked()
                 {
                     selected_element.0 = id

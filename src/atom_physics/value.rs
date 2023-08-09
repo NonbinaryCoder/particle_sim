@@ -3,7 +3,7 @@ use crate::terrain::color::AtomColor;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueUntyped<'a> {
     Color(AtomColor),
-    EnumVariant(&'a [u8]),
+    EnumVariant(&'a str),
     Unit,
 }
 

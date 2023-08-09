@@ -8,7 +8,7 @@ use bevy::{ecs::system::SystemParam, prelude::*};
 
 use crate::terrain::storage::Atoms;
 
-use self::diagnostics::Diagnostics;
+use self::diagnostics::{Diagnostic, Diagnostics};
 
 use super::{
     element::Element,
@@ -74,10 +74,10 @@ fn load_set_system(
             // Uses Bevy diagnostic because end users should never encounter
             // this error.
             error!("Request to load set {set_name}, which does not exist");
-            diagnostics.print_to_console(&[]);
+            diagnostics.print_to_console(&FileContents::create_map());
         };
     } else {
-        diagnostics.print_to_console(&[]);
+        diagnostics.print_to_console(&FileContents::create_map());
     }
 }
 
@@ -105,7 +105,7 @@ fn load_set(set: &SetHandle, diagnostics: &mut Diagnostics) -> Option<IdMap<Elem
     let files = read_files(set, diagnostics);
     let ret = (!diagnostics.has_errored()).then(|| {
         let mut elements = Element::create_map();
-        for ((_, file), id) in files.iter().zip(0..) {
+        for (id, _name, FileContents(file)) in files.iter() {
             parsing::parse_file(file, id, diagnostics, &mut elements);
         }
         elements
@@ -114,55 +114,85 @@ fn load_set(set: &SetHandle, diagnostics: &mut Diagnostics) -> Option<IdMap<Elem
     ret
 }
 
+#[derive(Debug, Clone)]
+struct FileContents(String);
+
+impl MappedToId for FileContents {
+    type Id = FileId;
+}
+
+type FileId = u16;
+
+#[derive(Debug)]
+pub enum ReadFilesError {
+    ReadDirectory(std::io::Error),
+    OpenFile { name: String, e: std::io::Error },
+    ReadFile { name: String, e: std::io::Error },
+}
+
+impl Diagnostic for ReadFilesError {
+    fn level(&self) -> diagnostics::Level {
+        match self {
+            ReadFilesError::OpenFile { .. } | ReadFilesError::ReadFile { .. } => {
+                diagnostics::Level::Warn
+            }
+            ReadFilesError::ReadDirectory(_) => diagnostics::Level::Error,
+        }
+    }
+
+    fn description(&self, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+        match self {
+            ReadFilesError::ReadDirectory(e) => {
+                write!(buf, "Unable to read set directiory: {e}")
+            }
+            ReadFilesError::OpenFile { name, e } => {
+                write!(buf, "Unable to open file {name}: {e}; skipping")
+            }
+            ReadFilesError::ReadFile { name, e } => {
+                write!(buf, "Unable to read file {name}: {e}; skipping")
+            }
+        }
+    }
+}
+
 #[must_use]
-fn read_files(set: &SetHandle, diagnostics: &mut Diagnostics) -> Vec<(String, Vec<u8>)> {
-    let mut files = Vec::new();
+fn read_files(set: &SetHandle, diagnostics: &mut Diagnostics) -> IdMap<FileContents> {
+    let mut files = FileContents::create_map();
 
     let entries = match fs::read_dir(&set.path) {
         Ok(entries) => entries,
         Err(e) => {
-            diagnostics
-                .error("Unable to read set directiory")
-                .context(e);
-            return Vec::new();
+            diagnostics.add(ReadFilesError::ReadDirectory(e));
+            return files;
         }
     };
-    for entry in entries {
-        match entry {
-            Ok(entry) => {
-                let path = entry.path();
-                if entry.file_type().is_ok_and(|ty| ty.is_file())
-                    && path.extension().and_then(|s| s.to_str()) == Some("splang")
-                {
-                    let file_name = entry.file_name().to_string_lossy().into_owned();
-                    let mut file = match File::open(path) {
-                        Ok(file) => file,
-                        Err(e) => {
-                            diagnostics
-                                .warn(format!("Unable to open file {file_name}; skipping"))
-                                .context(e);
-                            continue;
-                        }
-                    };
+    for entry in entries.filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if entry.file_type().is_ok_and(|ty| ty.is_file())
+            && path.extension().and_then(|s| s.to_str()) == Some("splang")
+        {
+            let file_name = entry.file_name();
+            let file_name = file_name.to_string_lossy().into_owned();
+            let mut file = match File::open(path) {
+                Ok(file) => file,
+                Err(e) => {
+                    diagnostics.add(ReadFilesError::OpenFile { name: file_name, e });
+                    continue;
+                }
+            };
 
-                    let mut buf = Vec::new();
-                    match file.read_to_end(&mut buf) {
-                        Ok(_) => {
-                            files.push((file_name, buf));
-                        }
-                        Err(e) => {
-                            diagnostics
-                                .warn(format!("Unable to read file {file_name}; skipping"))
-                                .context(e);
-                            continue;
-                        }
-                    }
+            let mut buf = String::new();
+            match file.read_to_string(&mut buf) {
+                Ok(_) => {
+                    files
+                        .insert(file_name, FileContents(buf))
+                        .expect("Files can't have the same name");
+                }
+                Err(e) => {
+                    diagnostics.add(ReadFilesError::ReadFile { name: file_name, e });
+                    continue;
                 }
             }
-            Err(e) => diagnostics
-                .error("Unable to read entry in set directory")
-                .context(e)
-                .w(),
         }
     }
 

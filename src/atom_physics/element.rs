@@ -1,3 +1,5 @@
+use bevy::prelude::Resource;
+
 use crate::terrain::{color::AtomColor, Atom, JoinFace};
 
 use super::id::{CreateInstanceWithId, IdMap, MappedToId};
@@ -26,14 +28,14 @@ impl MappedToId for Element {
         let mut map = IdMap::new();
         // Can't error bc map is empty
         let _ = map.insert(
-            b"Void",
+            "Void",
             Element {
                 color: AtomColor::INVISIBLE,
                 ..Default::default()
             },
         );
         let _ = map.insert(
-            b"Air",
+            "Air",
             Element {
                 color: AtomColor::INVISIBLE,
                 ..Default::default()
@@ -54,6 +56,8 @@ impl CreateInstanceWithId for Element {
         }
     }
 }
+
+impl Resource for IdMap<Element> {}
 
 impl Element {
     pub const VOID_ID: <Self as MappedToId>::Id = 0;

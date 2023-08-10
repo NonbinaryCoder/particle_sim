@@ -8,11 +8,11 @@ pub enum ValueUntyped<'a> {
 }
 
 impl<'a> ValueUntyped<'a> {
-    pub fn variant_name(&self) -> &'static str {
+    pub fn variant_name(&self) -> String {
         match self {
-            ValueUntyped::Color(_) => "Color",
-            ValueUntyped::EnumVariant(_) => "Enum",
-            ValueUntyped::Unit => "()",
+            ValueUntyped::Color(_) => "Color".to_owned(),
+            ValueUntyped::EnumVariant(v) => format!("{{ {v} }}"),
+            ValueUntyped::Unit => "()".to_owned(),
         }
     }
 }

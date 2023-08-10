@@ -13,60 +13,14 @@ use crate::atom_physics::io::{
     FileId,
 };
 
-#[derive(Debug, Clone)]
-pub enum Ast<'a> {
-    Block(Positioned<Vec<Ast<'a>>>),
-    Ident(Positioned<&'a str>),
-    HexColor(Positioned<&'a str>),
-    Element {
-        name: Positioned<&'a str>,
-        body: Vec<Ast<'a>>,
-    },
-    VariableAssign {
-        variable: Positioned<&'a str>,
-        value: Box<Ast<'a>>,
-    },
-}
-
-impl<'a> PartialEq for Ast<'a> {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Ast::Ident(a), Ast::Ident(b)) => a.object == b.object,
-            (Ast::Block(a), Ast::Block(b)) => a.object == b.object,
-            (Ast::HexColor(a), Ast::HexColor(b)) => a.object == b.object,
-            (
-                Ast::Element {
-                    name: a_name,
-                    body: a_body,
-                    ..
-                },
-                Ast::Element {
-                    name: b_name,
-                    body: b_body,
-                    ..
-                },
-            ) => a_name.object == b_name.object && a_body == b_body,
-            (
-                Ast::VariableAssign {
-                    variable: a_var,
-                    value: a_val,
-                    ..
-                },
-                Ast::VariableAssign {
-                    variable: b_var,
-                    value: b_val,
-                    ..
-                },
-            ) => a_var.object == b_var.object && a_val == b_val,
-            _ => false,
-        }
-    }
-}
-
-impl<'a> Eq for Ast<'a> {}
+use super::Ast;
 
 impl<'a> Ast<'a> {
-    pub fn parse(contents: &'a str, file: FileId, diagnostics: &mut Diagnostics) -> Vec<Ast<'a>> {
+    pub fn generate(
+        contents: &'a str,
+        file: FileId,
+        diagnostics: &mut Diagnostics,
+    ) -> Vec<Ast<'a>> {
         let s = Span::new_extra(contents, file);
 
         match block(BlockTy::File)(trim_start(s)) {
@@ -84,7 +38,7 @@ impl<'a> Ast<'a> {
     }
 }
 
-type IResult<'a, O, E = ParseError> = nom::IResult<Span<'a>, O, E>;
+type IResult<'a, O, E = GenerateError> = nom::IResult<Span<'a>, O, E>;
 
 fn ast(s: Span<'_>) -> IResult<'_, Ast<'_>> {
     alt((
@@ -115,7 +69,7 @@ impl BlockTy {
         match self {
             BlockTy::Bracket => char('}').and(multispace0).map(drop).parse(s),
             BlockTy::File if s.len() == 0 => Ok((s, ())),
-            BlockTy::File => ParseErrorKind::ExpectedEof.at(s).error(),
+            BlockTy::File => GenerateErrorKind::ExpectedEof.at(s).error(),
         }
     }
 }
@@ -152,8 +106,8 @@ fn ident(s: Span<'_>) -> IResult<'_, Positioned<&'_ str>> {
     .map(Into::into)
     .parse(s)
     .map_err(|err| {
-        err.map(|err| ParseError {
-            kind: ParseErrorKind::ExpectedIdentifier,
+        err.map(|err| GenerateError {
+            kind: GenerateErrorKind::ExpectedIdentifier,
             ..err
         })
     })
@@ -179,15 +133,12 @@ fn element(s: Span<'_>) -> IResult<'_, Ast<'_>> {
         tag("element").and(multispace0),
         separated_pair(ident, multispace0, block(BlockTy::Bracket)),
     )
-    .map(|(name, body)| Ast::Element {
-        name,
-        body: body.object,
-    })
+    .map(|(name, body)| Ast::Element { name, body })
     .parse(s)
     .map_err(|err| {
         err.map(|err| match err.kind {
-            ParseErrorKind::Nom(ErrorKind::Tag) => ParseError {
-                kind: ParseErrorKind::ExpectedKeywordElement,
+            GenerateErrorKind::Nom(ErrorKind::Tag) => GenerateError {
+                kind: GenerateErrorKind::ExpectedKeywordElement,
                 ..err
             },
             _ => err,
@@ -200,19 +151,19 @@ fn trim_start(s: Span<'_>) -> Span<'_> {
 }
 
 #[derive(Debug, Clone)]
-pub struct ParseError {
+struct GenerateError {
     pub position: Position,
-    pub kind: ParseErrorKind,
+    pub kind: GenerateErrorKind,
 }
 
-impl ParseError {
+impl GenerateError {
     pub fn error<T>(self) -> Result<T, nom::Err<Self>> {
         Err(nom::Err::Error(self))
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum ParseErrorKind {
+enum GenerateErrorKind {
     Nom(ErrorKind),
     WrongChar { expected: char },
     ExpectedIdentifier,
@@ -220,22 +171,22 @@ pub enum ParseErrorKind {
     ExpectedEof,
 }
 
-impl ParseErrorKind {
-    pub fn at(self, pos: impl Into<Position>) -> ParseError {
-        ParseError {
+impl GenerateErrorKind {
+    pub fn at(self, pos: impl Into<Position>) -> GenerateError {
+        GenerateError {
             position: pos.into(),
             kind: self,
         }
     }
 }
 
-impl<'a> nom::error::ParseError<Span<'a>> for ParseError {
+impl<'a> nom::error::ParseError<Span<'a>> for GenerateError {
     fn from_error_kind(input: Span<'a>, kind: ErrorKind) -> Self {
         let kind = match kind {
-            ErrorKind::AlphaNumeric => ParseErrorKind::ExpectedIdentifier,
-            kind => ParseErrorKind::Nom(kind),
+            ErrorKind::AlphaNumeric => GenerateErrorKind::ExpectedIdentifier,
+            kind => GenerateErrorKind::Nom(kind),
         };
-        ParseError {
+        GenerateError {
             position: input.into(),
             kind,
         }
@@ -246,11 +197,11 @@ impl<'a> nom::error::ParseError<Span<'a>> for ParseError {
     }
 
     fn from_char(input: Span<'a>, ch: char) -> Self {
-        ParseErrorKind::WrongChar { expected: ch }.at(input)
+        GenerateErrorKind::WrongChar { expected: ch }.at(input)
     }
 }
 
-impl Diagnostic for ParseError {
+impl Diagnostic for GenerateError {
     fn level(&self) -> diagnostics::Level {
         diagnostics::Level::Error
     }
@@ -262,9 +213,13 @@ mod tests {
 
     use super::*;
 
+    fn pos<T>(object: T) -> Positioned<T> {
+        Positioned::test_position(object)
+    }
+
     fn parsing_test(input: &str, output: &[Ast]) {
         let mut diagnostics = Diagnostics::init();
-        let parsed_block = Ast::parse(input, 0, &mut diagnostics);
+        let parsed_block = Ast::generate(input, 0, &mut diagnostics);
         if !diagnostics.is_empty() {
             let mut map = FileContents::create_map();
             map.insert("input", FileContents(input.to_owned())).unwrap();
@@ -276,7 +231,7 @@ mod tests {
 
     #[test]
     fn literal() {
-        parsing_test("Name", &[Ast::Ident(Position::TEST.position("Name"))]);
+        parsing_test("Name", &[Ast::Ident(pos("Name"))]);
     }
 
     #[test]
@@ -287,11 +242,11 @@ element Bedrock {
     color = #686868
 }",
             &[Ast::Element {
-                name: Position::TEST.position("Bedrock"),
-                body: vec![Ast::VariableAssign {
-                    variable: Position::TEST.position("color"),
-                    value: Box::new(Ast::HexColor(Position::TEST.position("686868"))),
-                }],
+                name: pos("Bedrock"),
+                body: pos(vec![Ast::VariableAssign {
+                    variable: pos("color"),
+                    value: Box::new(Ast::HexColor(pos("686868"))),
+                }]),
             }],
         );
     }
@@ -301,24 +256,22 @@ element Bedrock {
         parsing_test(
             "color = #FFFFFF",
             &[Ast::VariableAssign {
-                variable: Position::TEST.position("color"),
-                value: Box::new(Ast::HexColor(Position::TEST.position("FFFFFF"))),
+                variable: pos("color"),
+                value: Box::new(Ast::HexColor(pos("FFFFFF"))),
             }],
         );
     }
 
     #[test]
     fn empty_block() {
-        parsing_test("{}", &[Ast::Block(Position::TEST.position(Vec::new()))]);
+        parsing_test("{}", &[Ast::Block(pos(Vec::new()))]);
     }
 
     #[test]
     fn empty_block_in_block() {
         parsing_test(
             "{{}}",
-            &[Ast::Block(Position::TEST.position(vec![Ast::Block(
-                Position::TEST.position(Vec::new()),
-            )]))],
+            &[Ast::Block(pos(vec![Ast::Block(pos(Vec::new()))]))],
         );
     }
 
@@ -326,9 +279,7 @@ element Bedrock {
     fn empty_blocks_many_newlines() {
         parsing_test(
             "\n   {\n \n{  \n}\n}\n\n",
-            &[Ast::Block(Position::TEST.position(vec![Ast::Block(
-                Position::TEST.position(Vec::new()),
-            )]))],
+            &[Ast::Block(pos(vec![Ast::Block(pos(Vec::new()))]))],
         );
     }
 
@@ -336,8 +287,8 @@ element Bedrock {
     fn hex_colors() {
         fn va<'a>(name: &'a str, value: &'a str) -> Ast<'a> {
             Ast::VariableAssign {
-                variable: Position::TEST.position(name),
-                value: Box::new(Ast::HexColor(Position::TEST.position(value))),
+                variable: pos(name),
+                value: Box::new(Ast::HexColor(pos(value))),
             }
         }
         parsing_test(
@@ -375,8 +326,8 @@ l = #ABCDEfa",
     fn enum_variants() {
         fn va<'a>(name: &'a str, value: &'a str) -> Ast<'a> {
             Ast::VariableAssign {
-                variable: Position::TEST.position(name),
-                value: Box::new(Ast::Ident(Position::TEST.position(value))),
+                variable: pos(name),
+                value: Box::new(Ast::Ident(pos(value))),
             }
         }
 
@@ -393,10 +344,8 @@ b = OtherThing",
         parsing_test(
             "color = { #FFFFFF }",
             &[Ast::VariableAssign {
-                variable: Position::TEST.position("color"),
-                value: Box::new(Ast::Block(
-                    Position::TEST.position(vec![Ast::HexColor(Position::TEST.position("FFFFFF"))]),
-                )),
+                variable: pos("color"),
+                value: Box::new(Ast::Block(pos(vec![Ast::HexColor(pos("FFFFFF"))]))),
             }],
         );
     }

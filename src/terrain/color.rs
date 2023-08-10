@@ -23,6 +23,10 @@ impl AtomColor {
         Self { r, g, b, a }
     }
 
+    pub const fn from_grey(y: u8) -> Self {
+        Self::from_parts(y, y, y, y)
+    }
+
     pub fn decompress(self) -> UncompressedColor {
         let [r, g, b, a] = (Color::rgba_u8(self.r, self.g, self.b, self.a)).as_rgba_f32();
         UncompressedColor([r * a, g * a, b * a, a])

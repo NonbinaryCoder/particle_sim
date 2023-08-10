@@ -26,14 +26,6 @@ pub struct Position {
 }
 
 impl Position {
-    #[cfg(test)]
-    pub const TEST: Self = Self {
-        file: 0,
-        offset: 0,
-        line: 0,
-        length: 0,
-    };
-
     /// `start..end`
     pub fn from_start_end(start: Span, end: Span) -> Position {
         debug_assert_eq!(
@@ -49,10 +41,47 @@ impl Position {
         }
     }
 
+    /// Creates a new position containing `self` and `length` bytes before it.
+    ///
+    /// Will return incorrect result if the new start is no longer on the same
+    /// line.
+    pub fn extend_back_same_line(self, length: u16) -> Position {
+        Position {
+            offset: self.offset - length as usize,
+            length: self.length + length,
+            ..self
+        }
+    }
+
+    /// Creates a new position containing `self` and `other`.
+    ///
+    /// May not work if `other` is before `self`.
+    pub fn extend_to(self, other: Position) -> Position {
+        debug_assert_eq!(
+            self.file, other.file,
+            "Nothing should cross file boundaries like this"
+        );
+        Position {
+            file: self.file,
+            offset: self.offset,
+            line: self.line,
+            length: (other.offset - self.offset) as u16 + other.length,
+        }
+    }
+
     pub fn position<T>(self, object: T) -> Positioned<T> {
         Positioned {
             object,
             position: self,
+        }
+    }
+
+    pub fn char_inline(self, pos: usize) -> Position {
+        debug_assert!(pos < self.length as usize);
+        Position {
+            offset: self.offset + pos,
+            length: 1,
+            ..self
         }
     }
 }
@@ -93,6 +122,29 @@ impl<'a> From<Span<'a>> for Positioned<&'a str> {
         Self {
             object: *value,
             position: value.into(),
+        }
+    }
+}
+
+impl<T: PartialEq> PartialEq for Positioned<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.object == other.object
+    }
+}
+
+impl<T: Eq> Eq for Positioned<T> {}
+
+impl<T> Positioned<T> {
+    #[cfg(test)]
+    pub fn test_position(object: T) -> Positioned<T> {
+        Positioned {
+            object,
+            position: Position {
+                file: 0,
+                offset: 0,
+                line: 0,
+                length: 1,
+            },
         }
     }
 }

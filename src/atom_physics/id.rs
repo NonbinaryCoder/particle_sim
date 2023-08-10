@@ -1,6 +1,7 @@
 use std::{fmt, ops::Index};
 
 use indexmap::{map::Entry, IndexMap};
+use smartstring::alias::String;
 
 #[derive(Clone)]
 pub struct IdMap<T: MappedToId>(IndexMap<String, T>);

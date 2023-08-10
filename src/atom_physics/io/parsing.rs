@@ -12,6 +12,8 @@ use super::{
     FileId,
 };
 
+use smartstring::alias::String;
+
 mod ast_evaluation;
 mod ast_generation;
 
@@ -164,7 +166,7 @@ pub fn parse_element(body: &[Ast<'_>], diagnostics: &mut Diagnostics) -> Element
                         Ok(val) => diagnostics.add(ElementError {
                             position: value.position(),
                             kind: ElementErrorKind::VariableType {
-                                expected: "color".to_owned(),
+                                expected: "color".into(),
                                 found: val.variant_name(),
                             },
                         }),
@@ -189,7 +191,7 @@ pub fn parse_element(body: &[Ast<'_>], diagnostics: &mut Diagnostics) -> Element
                         Ok(val) => diagnostics.add(ElementError {
                             position: value.position(),
                             kind: ElementErrorKind::VariableType {
-                                expected: "{ Never | SameAlpha }".to_owned(),
+                                expected: "{ Never | SameAlpha }".into(),
                                 found: val.variant_name(),
                             },
                         }),

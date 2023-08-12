@@ -140,16 +140,16 @@ impl Diagnostic for ReadFilesError {
         }
     }
 
-    fn description(&self, buf: &mut dyn std::io::Write) -> std::io::Result<()> {
+    fn description(&self) -> String {
         match self {
             ReadFilesError::ReadDirectory(e) => {
-                write!(buf, "Unable to read set directiory: {e}")
+                format!("Unable to read set directiory: {e}")
             }
             ReadFilesError::OpenFile { name, e } => {
-                write!(buf, "Unable to open file {name}: {e}; skipping")
+                format!("Unable to open file {name}: {e}; skipping")
             }
             ReadFilesError::ReadFile { name, e } => {
-                write!(buf, "Unable to read file {name}: {e}; skipping")
+                format!("Unable to read file {name}: {e}; skipping")
             }
         }
     }
@@ -162,7 +162,7 @@ fn read_files(set: &SetHandle, diagnostics: &mut Diagnostics) -> IdMap<FileConte
     let entries = match fs::read_dir(&set.path) {
         Ok(entries) => entries,
         Err(e) => {
-            diagnostics.add(ReadFilesError::ReadDirectory(e));
+            diagnostics.add_unpositioned(ReadFilesError::ReadDirectory(e));
             return files;
         }
     };
@@ -176,7 +176,7 @@ fn read_files(set: &SetHandle, diagnostics: &mut Diagnostics) -> IdMap<FileConte
             let mut file = match File::open(path) {
                 Ok(file) => file,
                 Err(e) => {
-                    diagnostics.add(ReadFilesError::OpenFile { name: file_name, e });
+                    diagnostics.add_unpositioned(ReadFilesError::OpenFile { name: file_name, e });
                     continue;
                 }
             };
@@ -189,7 +189,7 @@ fn read_files(set: &SetHandle, diagnostics: &mut Diagnostics) -> IdMap<FileConte
                         .expect("Files can't have the same name");
                 }
                 Err(e) => {
-                    diagnostics.add(ReadFilesError::ReadFile { name: file_name, e });
+                    diagnostics.add_unpositioned(ReadFilesError::ReadFile { name: file_name, e });
                     continue;
                 }
             }

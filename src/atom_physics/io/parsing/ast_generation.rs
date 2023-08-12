@@ -31,7 +31,7 @@ impl<'a> Ast<'a> {
                     nom::Err::Error(e) => e,
                     nom::Err::Failure(e) => e,
                 };
-                diagnostics.add(e);
+                diagnostics.add(e.position, e.kind);
                 Vec::new()
             }
         }
@@ -201,9 +201,21 @@ impl<'a> nom::error::ParseError<Span<'a>> for GenerateError {
     }
 }
 
-impl Diagnostic for GenerateError {
+impl Diagnostic for GenerateErrorKind {
     fn level(&self) -> diagnostics::Level {
         diagnostics::Level::Error
+    }
+
+    fn description(&self) -> String {
+        match self {
+            GenerateErrorKind::Nom(e) => format!("Unexpected nom error: {e:?}"),
+            GenerateErrorKind::WrongChar { expected } => {
+                format!("Expected character '{expected}'")
+            }
+            GenerateErrorKind::ExpectedIdentifier => "Expected identifier".to_owned(),
+            GenerateErrorKind::ExpectedKeywordElement => r#"Expected keyword "element""#.to_owned(),
+            GenerateErrorKind::ExpectedEof => "Expected EOF".to_string(),
+        }
     }
 }
 

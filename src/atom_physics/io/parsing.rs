@@ -96,43 +96,27 @@ pub fn parse_file(
                 let element = parse_element(body, diagnostics);
                 match elements.insert(*name, element) {
                     Ok(_) => {}
-                    Err(InsertError::DuplicateName) => diagnostics.add(ElementError {
-                        position: ast.position(),
-                        kind: ElementErrorKind::DoubleDefineElement(name.object.into()),
-                    }),
-                    Err(InsertError::NoMoreIds) => diagnostics.add(ElementError {
-                        position: ast.position(),
-                        kind: ElementErrorKind::ElementLimitReached,
-                    }),
+                    Err(InsertError::DuplicateName) => diagnostics.add(
+                        ast.position(),
+                        ElementError::DoubleDefineElement(name.object.into()),
+                    ),
+                    Err(InsertError::NoMoreIds) => {
+                        diagnostics.add(ast.position(), ElementError::ElementLimitReached)
+                    }
                 }
             }
-            Ast::Block(b) => diagnostics.add(ParseError {
-                position: b.position,
-                kind: ParseErrorKind::UnexpectedBlock,
-            }),
+            Ast::Block(b) => diagnostics.add(b.position, ParseError::UnexpectedBlock),
             Ast::Ident(i) | Ast::VariableAssign { variable: i, .. } => {
-                diagnostics.add(ParseError {
-                    position: i.position,
-                    kind: ParseErrorKind::UnexpectedIdent,
-                })
+                diagnostics.add(i.position, ParseError::UnexpectedIdent)
             }
-            Ast::HexColor(c) => diagnostics.add(ParseError {
-                position: c.position,
-                kind: ParseErrorKind::UnexpectedValue,
-            }),
+            Ast::HexColor(c) => diagnostics.add(c.position, ParseError::UnexpectedValue),
         }
     }
 }
 
 #[derive(Debug, Clone)]
-struct ParseError {
-    position: Position,
-    kind: ParseErrorKind,
-}
-
-#[derive(Debug, Clone)]
 #[allow(clippy::enum_variant_names)]
-enum ParseErrorKind {
+enum ParseError {
     UnexpectedBlock,
     UnexpectedIdent,
     UnexpectedValue,
@@ -141,6 +125,14 @@ enum ParseErrorKind {
 impl Diagnostic for ParseError {
     fn level(&self) -> diagnostics::Level {
         diagnostics::Level::Error
+    }
+
+    fn description(&self) -> std::string::String {
+        match self {
+            ParseError::UnexpectedBlock => "Unexpected block".to_owned(),
+            ParseError::UnexpectedIdent => "Unexpected identifier".to_owned(),
+            ParseError::UnexpectedValue => "Unexpected value".to_owned(),
+        }
     }
 }
 
@@ -153,32 +145,26 @@ pub fn parse_element(body: &[Ast<'_>], diagnostics: &mut Diagnostics) -> Element
             Ast::VariableAssign { variable, value } => match **variable {
                 "color" => {
                     if color_set {
-                        diagnostics.add(ElementError {
-                            position: value.position(),
-                            kind: ElementErrorKind::DoubleDefineVariable,
-                        });
+                        diagnostics.add(value.position(), ElementError::DoubleDefineVariable);
                     }
                     color_set = true;
                     match value.const_eval() {
                         Ok(ValueUntyped::Color(val)) => {
                             element.color = val;
                         }
-                        Ok(val) => diagnostics.add(ElementError {
-                            position: value.position(),
-                            kind: ElementErrorKind::VariableType {
+                        Ok(val) => diagnostics.add(
+                            value.position(),
+                            ElementError::VariableType {
                                 expected: "color".into(),
                                 found: val.variant_name(),
                             },
-                        }),
-                        Err(e) => diagnostics.add(e),
+                        ),
+                        Err(e) => diagnostics.add_positioned(e),
                     }
                 }
                 "join_face" => {
                     if join_face_set {
-                        diagnostics.add(ElementError {
-                            position: value.position(),
-                            kind: ElementErrorKind::DoubleDefineVariable,
-                        });
+                        diagnostics.add(value.position(), ElementError::DoubleDefineVariable);
                     }
                     join_face_set = true;
                     match value.const_eval() {
@@ -188,38 +174,26 @@ pub fn parse_element(body: &[Ast<'_>], diagnostics: &mut Diagnostics) -> Element
                         Ok(ValueUntyped::EnumVariant("SameAlpha")) => {
                             element.join_face = JoinFace::SameAlpha;
                         }
-                        Ok(val) => diagnostics.add(ElementError {
-                            position: value.position(),
-                            kind: ElementErrorKind::VariableType {
+                        Ok(val) => diagnostics.add(
+                            value.position(),
+                            ElementError::VariableType {
                                 expected: "{ Never | SameAlpha }".into(),
                                 found: val.variant_name(),
                             },
-                        }),
-                        Err(e) => diagnostics.add(e),
+                        ),
+                        Err(e) => diagnostics.add_positioned(e),
                     }
                 }
-                _ => diagnostics.add(ElementError {
-                    position: variable.position,
-                    kind: ElementErrorKind::UnknownVariable,
-                }),
+                _ => diagnostics.add(variable.position, ElementError::UnknownVariable),
             },
-            _ => diagnostics.add(ElementError {
-                position: ast.position(),
-                kind: ElementErrorKind::UnexpectedAstKind,
-            }),
+            _ => diagnostics.add(ast.position(), ElementError::UnexpectedAstKind),
         }
     }
     element
 }
 
 #[derive(Debug, Clone)]
-struct ElementError {
-    position: Position,
-    kind: ElementErrorKind,
-}
-
-#[derive(Debug, Clone)]
-enum ElementErrorKind {
+enum ElementError {
     UnexpectedAstKind,
     VariableType { expected: String, found: String },
     DoubleDefineVariable,
@@ -230,14 +204,34 @@ enum ElementErrorKind {
 
 impl Diagnostic for ElementError {
     fn level(&self) -> diagnostics::Level {
-        match self.kind {
-            ElementErrorKind::DoubleDefineVariable
-            | ElementErrorKind::UnknownVariable
-            | ElementErrorKind::DoubleDefineElement(_)
-            | ElementErrorKind::ElementLimitReached => diagnostics::Level::Warn,
-            ElementErrorKind::UnexpectedAstKind | ElementErrorKind::VariableType { .. } => {
+        match self {
+            ElementError::DoubleDefineVariable
+            | ElementError::UnknownVariable
+            | ElementError::DoubleDefineElement(_)
+            | ElementError::ElementLimitReached => diagnostics::Level::Warn,
+            ElementError::UnexpectedAstKind | ElementError::VariableType { .. } => {
                 diagnostics::Level::Error
             }
+        }
+    }
+
+    fn description(&self) -> std::string::String {
+        match self {
+            ElementError::UnexpectedAstKind => {
+                "Element body should contain only properties, variables, and rules".to_owned()
+            }
+            ElementError::VariableType { expected, found } => {
+                format!("Variable has type {expected}, but found value of type {found}")
+            }
+            ElementError::DoubleDefineVariable => "Variable defined twice".to_owned(),
+            ElementError::UnknownVariable => "Unknown variable".to_owned(),
+            ElementError::DoubleDefineElement(_) => {
+                "Element defined twice; using second definition".to_owned()
+            }
+            ElementError::ElementLimitReached => format!(
+                "Limit of {} elements exceeded",
+                crate::atom_physics::element::ElementId::MAX
+            ),
         }
     }
 }

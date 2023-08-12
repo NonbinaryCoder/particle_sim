@@ -13,6 +13,15 @@ pub enum Level {
     Error,
 }
 
+impl std::fmt::Display for Level {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Level::Warn => write!(f, "Warning"),
+            Level::Error => write!(f, "Error"),
+        }
+    }
+}
+
 pub type Span<'a> = LocatedSpan<&'a str, FileId>;
 
 pub type FileId = u16;
@@ -152,14 +161,12 @@ impl<T> Positioned<T> {
 pub trait Diagnostic: std::fmt::Debug {
     fn level(&self) -> Level;
 
-    fn description(&self, _buf: &mut dyn std::io::Write) -> std::io::Result<()> {
-        Ok(())
-    }
+    fn description(&self) -> String;
 }
 
 #[derive(Debug)]
 pub struct Diagnostics {
-    diagnostics: Vec<Box<dyn Diagnostic>>,
+    diagnostics: Vec<(Option<Position>, Box<dyn Diagnostic>)>,
     errored: bool,
 }
 
@@ -171,9 +178,19 @@ impl Diagnostics {
         }
     }
 
-    pub fn add(&mut self, diagnostic: impl Diagnostic + 'static) {
-        self.errored |= diagnostic.level() == Level::Warn;
-        self.diagnostics.push(Box::new(diagnostic));
+    pub fn add(&mut self, position: Position, diagnostic: impl Diagnostic + 'static) {
+        self.errored |= diagnostic.level() == Level::Error;
+        self.diagnostics
+            .push((Some(position), Box::new(diagnostic)));
+    }
+
+    pub fn add_positioned<T: Diagnostic + 'static>(&mut self, val: Positioned<T>) {
+        self.add(val.position, val.object);
+    }
+
+    pub fn add_unpositioned(&mut self, diagnostic: impl Diagnostic + 'static) {
+        self.errored |= diagnostic.level() == Level::Error;
+        self.diagnostics.push((None, Box::new(diagnostic)));
     }
 
     pub fn has_errored(&self) -> bool {
@@ -185,9 +202,44 @@ impl Diagnostics {
         self.diagnostics.is_empty()
     }
 
-    pub(super) fn print_to_console(&self, _files: &IdMap<FileContents>) {
-        for diagnostic in &self.diagnostics {
-            dbg!(diagnostic);
+    pub(super) fn print_to_console(&self, files: &IdMap<FileContents>) {
+        for (pos, diagnostic) in &self.diagnostics {
+            print_diagnostic(files, *pos, &**diagnostic);
+        }
+    }
+}
+
+fn print_diagnostic(
+    files: &IdMap<FileContents>,
+    position: Option<Position>,
+    diagnostic: &dyn Diagnostic,
+) {
+    println!("{}: {}", diagnostic.level(), diagnostic.description());
+    if let Some(position) = position {
+        let (file_name, FileContents(file_contents)) = &mut files.get_full(position.file).unwrap();
+        let mut line_start_offset = 0;
+        for line in file_contents.split_inclusive('\n') {
+            let line_end_offset = line_start_offset + line.len();
+            let line = line.trim();
+
+            if position.offset < line_end_offset {
+                let start_x = position.offset - line_start_offset;
+                println!("  --> {file_name}:{}:{}", position.line, start_x);
+                if (position.length as usize) <= line_end_offset - position.offset {
+                    println!("{:<4}| {}", position.line, line);
+                    print!("    | ");
+                    for _ in 0..start_x {
+                        print!(" ");
+                    }
+                    for _ in 0..position.length {
+                        print!("^");
+                    }
+                    println!();
+                }
+                break;
+            }
+
+            line_start_offset = line_end_offset;
         }
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
     atom_physics::{
-        io::diagnostics::{self, Diagnostic, Position},
+        io::diagnostics::{self, Diagnostic, Positioned},
         value::ValueUntyped,
     },
     terrain::color::AtomColor,
@@ -9,24 +9,21 @@ use crate::{
 use super::Ast;
 
 impl<'a> Ast<'a> {
-    pub fn const_eval(&self) -> Result<ValueUntyped<'a>, EvalError> {
+    pub fn const_eval(&self) -> Result<ValueUntyped<'a>, Positioned<EvalError>> {
         match self {
             Ast::Block(b) => match b.as_slice() {
                 [] => Ok(ValueUntyped::Unit),
                 [ast] => ast.const_eval(),
-                _ => Err(EvalError {
-                    position: b.position,
-                    kind: EvalErrorKind::NotConst,
-                }),
+                _ => Err(b.position.position(EvalError::NotConst)),
             },
             Ast::Ident(i) => Ok(ValueUntyped::EnumVariant(i)),
             Ast::HexColor(c) => {
                 for (pos, digit) in c.char_indices() {
                     if !matches!(digit, '0'..='9' | 'a'..='f' | 'A'..='F') {
-                        return Err(EvalError {
-                            position: c.position.char_inline(pos),
-                            kind: EvalErrorKind::InvalidHexDigit,
-                        });
+                        return Err(c
+                            .position
+                            .char_inline(pos)
+                            .position(EvalError::InvalidHexDigit));
                     }
                 }
                 fn map(v: u8) -> u8 {
@@ -68,7 +65,7 @@ impl<'a> Ast<'a> {
                             map(a0) << 4 | map(a1),
                         )))
                     }
-                    _ => todo!(),
+                    _ => Err(c.position.position(EvalError::InvalidHexColorLen)),
                 }
             }
             Ast::Element { .. } => Ok(ValueUntyped::Unit),
@@ -78,13 +75,7 @@ impl<'a> Ast<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct EvalError {
-    position: Position,
-    kind: EvalErrorKind,
-}
-
-#[derive(Debug, Clone)]
-pub enum EvalErrorKind {
+pub enum EvalError {
     NotConst,
     InvalidHexDigit,
     InvalidHexColorLen,
@@ -93,5 +84,20 @@ pub enum EvalErrorKind {
 impl Diagnostic for EvalError {
     fn level(&self) -> diagnostics::Level {
         diagnostics::Level::Error
+    }
+
+    fn description(&self) -> String {
+        match self {
+            EvalError::NotConst => {
+                "Cannot evaluate non-const expression in const context".to_owned()
+            }
+            EvalError::InvalidHexDigit => {
+                "Invalid hex digit (valid digits are 0-9, a-f, and A-F)".to_owned()
+            }
+            EvalError::InvalidHexColorLen => {
+                "Hex colors must be in the format of y, yy, rgb, rgba, rrggbb, or rrggbbaa"
+                    .to_owned()
+            }
+        }
     }
 }

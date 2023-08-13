@@ -2731,6 +2731,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_egui",
+ "crossbeam-channel",
  "indexmap 2.0.0",
  "nom",
  "nom_locate",

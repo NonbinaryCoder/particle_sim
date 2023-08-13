@@ -9,6 +9,7 @@ opt-level = 3
 [dependencies]
 bevy = { version = "0.11", features = ["dynamic_linking"] }
 bevy_egui = "0.21"
+crossbeam-channel = "0.5.8"
 indexmap = "2.0.0"
 nom = "7.1.3"
 nom_locate = "4.1.0"

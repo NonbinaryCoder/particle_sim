@@ -4,9 +4,9 @@ use std::{
     path::PathBuf,
 };
 
-use bevy::{ecs::system::SystemParam, prelude::*};
+use bevy::prelude::*;
 
-use crate::terrain::storage::Atoms;
+use crate::terrain::{thread::TerrainThread, AtomWorld};
 
 use self::diagnostics::{Diagnostic, Diagnostics};
 
@@ -46,9 +46,8 @@ pub struct AvalibleSets(Vec<SetHandle>);
 fn load_set_system(
     mut event_reader: EventReader<LoadSet>,
     mut avalible_sets: ResMut<AvalibleSets>,
-    hot_reload_params: HotReloadParams,
+    terrain_thread: Res<TerrainThread>,
 ) {
-    let mut diagnostics = Diagnostics::init();
     let set_name = event_reader
         .iter()
         .next()
@@ -65,19 +64,12 @@ fn load_set_system(
 
     if let Some(set_name) = set_name {
         if let Some(set) = avalible_sets.iter().find(|set| &set.name == set_name) {
-            if let Some(elements) = load_set(set, &mut diagnostics) {
-                if !diagnostics.has_errored() {
-                    hot_reload_set(hot_reload_params, elements);
-                }
-            }
+            terrain_thread.load_set(set.clone());
         } else {
             // Uses Bevy diagnostic because end users should never encounter
             // this error.
             error!("Request to load set {set_name}, which does not exist");
-            diagnostics.print_to_console(&FileContents::create_map());
         };
-    } else {
-        diagnostics.print_to_console(&FileContents::create_map());
     }
 }
 
@@ -99,6 +91,15 @@ fn load_avalible_sets(avalible_sets: &mut Vec<SetHandle>) -> io::Result<()> {
         }
     }
     Ok(())
+}
+
+pub fn load_and_reload_set(set: SetHandle, world: &mut AtomWorld) {
+    let mut diagnostics = Diagnostics::init();
+    if let Some(new_elements) = load_set(&set, &mut diagnostics) {
+        if !diagnostics.has_errored() {
+            hot_reload_set(world, new_elements);
+        }
+    }
 }
 
 fn load_set(set: &SetHandle, diagnostics: &mut Diagnostics) -> Option<IdMap<Element>> {
@@ -199,16 +200,10 @@ fn read_files(set: &SetHandle, diagnostics: &mut Diagnostics) -> IdMap<FileConte
     files
 }
 
-#[derive(Debug, SystemParam)]
-struct HotReloadParams<'w> {
-    world: ResMut<'w, Atoms>,
-    elements: ResMut<'w, IdMap<Element>>,
-}
-
-fn hot_reload_set(mut old: HotReloadParams, elements: IdMap<Element>) {
-    old.world.modify_all(|mut atom| {
-        if let Some((name, old_element)) = old.elements.get_full(atom.element) {
-            if let Some((id, element)) = elements.get_full_by_name(name) {
+fn hot_reload_set(world: &mut AtomWorld, new_elements: IdMap<Element>) {
+    world.atoms.modify_all(|mut atom| {
+        if let Some((name, old_element)) = world.elements.get_full(atom.element) {
+            if let Some((id, element)) = new_elements.get_full_by_name(name) {
                 atom.element = id;
 
                 macro_rules! change_if_default {
@@ -225,9 +220,9 @@ fn hot_reload_set(mut old: HotReloadParams, elements: IdMap<Element>) {
                 change_if_default!(color);
                 change_if_default!(join_face);
             } else {
-                *atom = elements.air();
+                *atom = new_elements.air();
             }
         }
     });
-    *old.elements = elements;
+    world.elements = new_elements;
 }

@@ -7,7 +7,10 @@ use std::{
 
 use bevy::prelude::*;
 
-use crate::atom_physics::element::{Element, ElementId};
+use crate::atom_physics::{
+    element::{Element, ElementId},
+    id::IdMap,
+};
 
 use self::{color::AtomColor, storage::Atoms};
 
@@ -15,14 +18,21 @@ pub mod change_detection;
 pub mod color;
 pub mod rendering;
 pub mod storage;
+pub mod thread;
 
 pub struct TerrainPlugin;
 
 impl Plugin for TerrainPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(rendering::RenderingPlugin)
+        app.add_plugins((rendering::RenderingPlugin, thread::ThreadPlugin))
             .init_resource::<Atoms>();
     }
+}
+
+#[derive(Debug)]
+pub struct AtomWorld {
+    pub atoms: Atoms,
+    pub elements: IdMap<Element>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

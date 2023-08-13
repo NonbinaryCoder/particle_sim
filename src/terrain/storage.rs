@@ -23,7 +23,7 @@ type ChunksCurveIterMut<'a> = array3d::SimpleCurveIterMut<'a, ChunkData>;
 
 pub const DEFAULT_SIZE: UVec3 = UVec3::new(128, 48, 256);
 
-#[derive(Debug, Clone, Resource)]
+#[derive(Debug, Clone)]
 pub struct Atoms {
     atoms: Array3d<Atom, AtomsCurve>,
     chunks: Array3d<ChunkData, ChunksCurve>,
